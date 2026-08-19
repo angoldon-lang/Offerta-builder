@@ -69,7 +69,7 @@ def test_force_prosegue_nonostante_le_anomalie(tmp_path, form_data):
 
 
 def test_pdf_non_generato_per_default(tmp_path, csv_bom_path, form_data):
-    """Il deliverable e' il DOCX: il PDF si chiede esplicitamente."""
+    """Il deliverable è il DOCX: il PDF si chiede esplicitamente."""
     result = build_offer(bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path))
     assert "pdf" not in result.outputs
     assert not os.path.exists(os.path.join(str(tmp_path), "offerta.pdf"))
@@ -88,7 +88,7 @@ def test_pdf_su_richiesta(tmp_path, csv_bom_path, form_data):
 
 def test_pdf_bloccato_se_il_qa_fallisce(tmp_path, csv_bom_path, form_data):
     """QA rosso: il DOCX esce (va corretto a mano), il PDF no."""
-    # validita' oltre quella della quotazione distributore (31/07/2026)
+    # validità oltre quella della quotazione distributore (31/07/2026)
     form_data["validita_offerta"] = "15/08/2026"
     result = build_offer(
         bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path), make_pdf=True, force=False,

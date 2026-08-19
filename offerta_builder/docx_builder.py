@@ -1,6 +1,6 @@
 """Generazione del DOCX.
 
-Due modalita':
+Due modalità:
 
 * **template AD** (consigliata): il file Word aziendale con segnaposto Jinja
   (``{{ cliente }}``, ``{%tr for riga in righe %}``) viene compilato con
@@ -23,7 +23,7 @@ CURRENCY_LABEL = "EUR"
 
 
 def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, Any]) -> Dict[str, Any]:
-    """Prepara il contesto per il template: valori gia' formattati, niente calcoli."""
+    """Prepara il contesto per il template: valori già formattati, niente calcoli."""
     righe: List[Dict[str, str]] = []
     for index, item in enumerate(offer.items, start=1):
         righe.append(
@@ -143,7 +143,7 @@ def _render_fallback(context: Dict[str, Any], output_path: str) -> str:
         ("Referente", "referente"),
         ("Riferimento offerta", "riferimento_offerta"),
         ("Data offerta", "data_offerta"),
-        ("Validita' offerta", "validita_offerta"),
+        ("Validità offerta", "validita_offerta"),
         ("Autore", "autore"),
     ]:
         value = context.get(key, "")
@@ -205,7 +205,7 @@ def _render_fallback(context: Dict[str, Any], output_path: str) -> str:
         cells[1].paragraphs[0].add_run(str(context.get(key, ""))).bold = True
 
     if context.get("annualita") and len(context["annualita"]) > 1:
-        document.add_heading("Riepilogo per annualita'", level=2)
+        document.add_heading("Riepilogo per annualità", level=2)
         annual_table = document.add_table(rows=1, cols=4)
         annual_table.style = "Table Grid"
         for index, header in enumerate(["Periodo", "Imponibile", "IVA", "Totale"]):
@@ -224,7 +224,7 @@ def _render_fallback(context: Dict[str, Any], output_path: str) -> str:
     conditions_table = document.add_table(rows=0, cols=2)
     conditions_table.style = "Table Grid"
     for label, key in [
-        ("Validita' offerta", "validita_offerta"),
+        ("Validità offerta", "validita_offerta"),
         ("Tipologia di pagamento", "tipologia_pagamento"),
         ("Condizioni di pagamento", "condizioni_pagamento"),
         ("Fatturazione", "fatturazione"),

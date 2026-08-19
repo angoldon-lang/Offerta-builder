@@ -1,6 +1,6 @@
 """Form rapido: raccoglie e valida i dati che la BOM non contiene.
 
-Il form e' dichiarativo (vedi ``FIELDS``): la CLI lo usa sia per generare un
+Il form è dichiarativo (vedi ``FIELDS``): la CLI lo usa sia per generare un
 modello JSON da compilare, sia per chiedere in modo interattivo solo i campi
 mancanti. Nessun campo obbligatorio viene inventato: se manca, il flusso si
 ferma.
@@ -48,7 +48,7 @@ FIELDS: List[FieldSpec] = [
     FieldSpec("autore", "Autore", required=True, example="Andrea Goldoni"),
     FieldSpec("riferimento_offerta", "Riferimento offerta", required=True, example="OFF_ADC_26/0313_R03"),
     FieldSpec("data_offerta", "Data offerta", kind=KIND_DATE, required=True, example="19/07/2026"),
-    FieldSpec("validita_offerta", "Validita' offerta", kind=KIND_DATE, required=True, example="31/07/2026"),
+    FieldSpec("validita_offerta", "Validità offerta", kind=KIND_DATE, required=True, example="31/07/2026"),
     FieldSpec("tipologia_pagamento", "Tipologia pagamento", required=True, example="Bonifico bancario"),
     FieldSpec("condizioni_pagamento", "Condizioni pagamento", required=True, example="30 gg fine mese"),
     FieldSpec("fatturazione", "Fatturazione", required=True, example="Annuale anticipata"),
@@ -65,7 +65,7 @@ FIELDS: List[FieldSpec] = [
     FieldSpec("rinnovo", "Rinnovo", kind=KIND_CHOICE,
               choices=("automatico", "da concordare", "escluso"), default="da concordare"),
     FieldSpec("note_commerciali", "Note commerciali", kind=KIND_LIST,
-              help="Vincoli distributore/vendor, scadenze, non svincolabilita'"),
+              help="Vincoli distributore/vendor, scadenze, non svincolabilità"),
     FieldSpec("premessa", "Premessa (testo personalizzato)",
               help="Se vuota viene generata dal Content Generator"),
     FieldSpec("allegati", "Allegati", kind=KIND_LIST),
@@ -105,7 +105,7 @@ def blank_form() -> Dict[str, Any]:
 
 
 def load_form(path: str) -> Dict[str, Any]:
-    """Carica un form da JSON (o YAML, se PyYAML e' installato)."""
+    """Carica un form da JSON (o YAML, se PyYAML è installato)."""
     ext = os.path.splitext(path)[1].lower()
     with open(path, "r", encoding="utf-8") as handle:
         if ext in {".yaml", ".yml"}:
@@ -113,7 +113,7 @@ def load_form(path: str) -> Dict[str, Any]:
                 import yaml  # type: ignore
             except ImportError as exc:  # pragma: no cover - dipende dall'ambiente
                 raise RuntimeError(
-                    "Form YAML richiesto ma PyYAML non e' installato: usa un file .json"
+                    "Form YAML richiesto ma PyYAML non è installato: usa un file .json"
                 ) from exc
             return yaml.safe_load(handle) or {}
         return json.load(handle)
@@ -292,7 +292,7 @@ def _validate_dates(clean: Dict[str, Any]) -> List[Issue]:
                     code="form.validity_before_offer",
                     severity=SEVERITY_BLOCKING,
                     message=(
-                        f"Validita' offerta ({to_it(validita)}) precedente alla data offerta "
+                        f"Validità offerta ({to_it(validita)}) precedente alla data offerta "
                         f"({to_it(data_offerta)})."
                     ),
                     where="validita_offerta",
@@ -304,7 +304,7 @@ def _validate_dates(clean: Dict[str, Any]) -> List[Issue]:
                     code="form.validity_too_long",
                     severity=SEVERITY_WARNING,
                     message=(
-                        f"Validita' offerta a {(validita - data_offerta).days} giorni dalla data offerta: "
+                        f"Validità offerta a {(validita - data_offerta).days} giorni dalla data offerta: "
                         "verificare la coerenza con la quotazione del distributore."
                     ),
                     where="validita_offerta",
@@ -363,7 +363,7 @@ def _validate_services(clean: Dict[str, Any]) -> List[Issue]:
 
 
 def interactive_fill(data: Dict[str, Any], only_missing: bool = True) -> Dict[str, Any]:
-    """Chiede a video i campi mancanti (usato dalla CLI in modalita' guidata)."""
+    """Chiede a video i campi mancanti (usato dalla CLI in modalità guidata)."""
     filled = dict(data)
     for spec in FIELDS:
         if spec.kind == KIND_LIST:

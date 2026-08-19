@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from .dates import parse_date_strict, to_it
 from .models import SEVERITY_BLOCKING, SEVERITY_WARNING, Issue, PricedOffer, _json_safe
-from .money import close_enough, q2
+from .money import close_enough, format_eur, format_percent, q2
 
 LEVEL_OK = "ok"
 LEVEL_WARN = "warn"
@@ -146,7 +146,7 @@ def _check_duplicated_titles(text: str, headings: Optional[List[str]] = None) ->
     """Cerca titoli incollati (``PremessaPremessa``) e sezioni ripetute.
 
     Le ripetizioni di importi in celle adiacenti (prezzo unitario = totale con
-    quantita' 1) sono legittime: il confronto fra righe consecutive ignora
+    quantità 1) sono legittime: il confronto fra righe consecutive ignora
     quindi tutto cio' che contiene cifre.
     """
     if not text:
@@ -183,7 +183,7 @@ def _check_duplicated_titles(text: str, headings: Optional[List[str]] = None) ->
 def _check_dates(form: Dict[str, Any]) -> Check:
     problems: List[str] = []
     values: Dict[str, Optional[date]] = {}
-    for field_name, label in [("data_offerta", "Data offerta"), ("validita_offerta", "Validita' offerta")]:
+    for field_name, label in [("data_offerta", "Data offerta"), ("validita_offerta", "Validità offerta")]:
         parsed, error = parse_date_strict(form.get(field_name))
         values[field_name] = parsed
         if parsed is None:
@@ -191,7 +191,7 @@ def _check_dates(form: Dict[str, Any]) -> Check:
     data_offerta, validita = values.get("data_offerta"), values.get("validita_offerta")
     if data_offerta and validita and validita < data_offerta:
         problems.append(
-            f"Validita' ({to_it(validita)}) precedente alla data offerta ({to_it(data_offerta)})."
+            f"Validità ({to_it(validita)}) precedente alla data offerta ({to_it(data_offerta)})."
         )
     if problems:
         return Check("qa.date", "Date offerta", LEVEL_FAIL, " ".join(problems), {"problemi": problems})
@@ -199,15 +199,15 @@ def _check_dates(form: Dict[str, Any]) -> Check:
         "qa.date",
         "Date offerta",
         LEVEL_OK,
-        f"Date coerenti: offerta {to_it(data_offerta)}, validita' {to_it(validita)}.",
+        f"Date coerenti: offerta {to_it(data_offerta)}, validità {to_it(validita)}.",
     )
 
 
 def _check_validity_vs_bom(offer: PricedOffer, form: Dict[str, Any]) -> Check:
     validita, _ = parse_date_strict(form.get("validita_offerta"))
     if validita is None:
-        return Check("qa.validita_bom", "Validita' vs BOM", LEVEL_WARN,
-                     "Validita' offerta non interpretabile: confronto con la BOM non eseguito.")
+        return Check("qa.validita_bom", "Validità vs BOM", LEVEL_WARN,
+                     "Validità offerta non interpretabile: confronto con la BOM non eseguito.")
     problems: List[str] = []
     checked = 0
     for bom in offer.boms:
@@ -223,16 +223,16 @@ def _check_validity_vs_bom(offer: PricedOffer, form: Dict[str, Any]) -> Check:
     if problems:
         return Check(
             "qa.validita_bom",
-            "Validita' vs BOM",
+            "Validità vs BOM",
             LEVEL_FAIL,
-            "La validita' dell'offerta supera quella della quotazione distributore.",
+            "La validità dell'offerta supera quella della quotazione distributore.",
             {"problemi": problems},
         )
     if checked == 0:
-        return Check("qa.validita_bom", "Validita' vs BOM", LEVEL_WARN,
-                     "Nessuna BOM riporta una validita': va confermata con il distributore.")
-    return Check("qa.validita_bom", "Validita' vs BOM", LEVEL_OK,
-                 "Validita' offerta compatibile con le quotazioni distributore.")
+        return Check("qa.validita_bom", "Validità vs BOM", LEVEL_WARN,
+                     "Nessuna BOM riporta una validità: va confermata con il distributore.")
+    return Check("qa.validita_bom", "Validità vs BOM", LEVEL_OK,
+                 "Validità offerta compatibile con le quotazioni distributore.")
 
 
 def _check_line_totals(offer: PricedOffer) -> Check:
@@ -242,19 +242,21 @@ def _check_line_totals(offer: PricedOffer) -> Check:
     totals = offer.totals
     problems = []
     if not close_enough(sum_net, totals.total_net):
-        problems.append(f"imponibile righe {sum_net} != totale offerta {totals.total_net}")
+        problems.append(f"imponibile righe {format_eur(sum_net)} != totale offerta {format_eur(totals.total_net)}")
     if not close_enough(sum_vat, totals.total_vat):
-        problems.append(f"IVA righe {sum_vat} != IVA offerta {totals.total_vat}")
+        problems.append(f"IVA righe {format_eur(sum_vat)} != IVA offerta {format_eur(totals.total_vat)}")
     if not close_enough(sum_gross, totals.total_gross):
-        problems.append(f"totale lordo righe {sum_gross} != totale offerta {totals.total_gross}")
+        problems.append(f"totale lordo righe {format_eur(sum_gross)} != totale offerta {format_eur(totals.total_gross)}")
     annual_net = q2(sum((a.total_net for a in offer.annual), Decimal("0")))
     if offer.annual and not close_enough(annual_net, totals.total_net):
-        problems.append(f"riepilogo annualita' {annual_net} != imponibile offerta {totals.total_net}")
+        problems.append(
+            f"riepilogo annualità {format_eur(annual_net)} != imponibile offerta {format_eur(totals.total_net)}"
+        )
     if problems:
         return Check("qa.totali", "Quadratura totali", LEVEL_FAIL,
                      "Totali non quadrati: " + "; ".join(problems), {"problemi": problems})
     return Check("qa.totali", "Quadratura totali", LEVEL_OK,
-                 f"Somma righe = totale offerta ({totals.total_gross}).")
+                 f"Somma righe = totale offerta ({format_eur(totals.total_gross)}).")
 
 
 def _check_vat(offer: PricedOffer, form: Dict[str, Any]) -> Check:
@@ -266,20 +268,23 @@ def _check_vat(offer: PricedOffer, form: Dict[str, Any]) -> Check:
         rate = item.vat_percent if item.vat_percent is not None else expected_rate
         expected = q2(item.sell_net_total * rate / Decimal("100"))
         if not close_enough(expected, item.vat_total):
-            problems.append(f"riga '{item.key()}': IVA {item.vat_total}, attesa {expected}")
+            problems.append(
+                f"riga '{item.key()}': IVA {format_eur(item.vat_total)}, attesa {format_eur(expected)}"
+            )
     if problems:
         return Check("qa.iva", "Calcolo IVA", LEVEL_FAIL,
                      "IVA non coerente su alcune righe.", {"problemi": problems[:10]})
-    return Check("qa.iva", "Calcolo IVA", LEVEL_OK, f"IVA calcolata correttamente ({expected_rate}%).")
+    return Check("qa.iva", "Calcolo IVA", LEVEL_OK,
+                 f"IVA calcolata correttamente ({format_percent(expected_rate, 0)}).")
 
 
 def _check_margin(offer: PricedOffer, threshold: Decimal) -> Check:
     margin = offer.totals.margin_percent
     if threshold <= 0:
         return Check("qa.margine", "Margine minimo", LEVEL_WARN,
-                     f"Soglia di margine non impostata (margine offerta {margin}%).")
+                     f"Soglia di margine non impostata (margine offerta {format_percent(margin)}).")
     below = [
-        f"{i.key()} ({i.margin_percent}%)"
+        f"{i.key()} ({format_percent(i.margin_percent)})"
         for i in offer.items
         if i.sell_net_total and i.margin_percent is not None and i.margin_percent < threshold
     ]
@@ -288,19 +293,20 @@ def _check_margin(offer: PricedOffer, threshold: Decimal) -> Check:
             "qa.margine",
             "Margine minimo",
             LEVEL_FAIL,
-            f"Margine offerta {margin}% sotto la soglia minima {threshold}%.",
+            f"Margine offerta {format_percent(margin)}, sotto la soglia minima {format_percent(threshold)}.",
             {"margine": margin, "soglia": threshold, "righe_sotto_soglia": below[:20]},
         )
     if below:
+        quante = f"{len(below)} righe sono" if len(below) > 1 else "1 riga è"
         return Check(
             "qa.margine",
             "Margine minimo",
             LEVEL_WARN,
-            f"Margine totale {margin}% sopra soglia, ma {len(below)} righe sono sotto il {threshold}%.",
+            f"Margine totale {format_percent(margin)} sopra soglia, ma {quante} sotto il {format_percent(threshold)}.",
             {"righe_sotto_soglia": below[:20]},
         )
     return Check("qa.margine", "Margine minimo", LEVEL_OK,
-                 f"Margine offerta {margin}%, sopra la soglia {threshold}%.")
+                 f"Margine offerta {format_percent(margin)}, sopra la soglia {format_percent(threshold)}.")
 
 
 def _check_payment_terms(form: Dict[str, Any]) -> Check:
@@ -356,7 +362,7 @@ def _check_document_totals(offer: PricedOffer, text: str) -> Check:
 
 
 def _checks_from_issues(offer: PricedOffer) -> List[Check]:
-    """Riporta nel QA le anomalie di import/pricing gia' raccolte a monte."""
+    """Riporta nel QA le anomalie di import/pricing già raccolte a monte."""
     issues: List[Issue] = list(offer.issues)
     for bom in offer.boms:
         issues.extend(bom.issues)

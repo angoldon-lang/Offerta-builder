@@ -1,7 +1,7 @@
 """Parsing e formattazione di importi/percentuali.
 
 Tutti i calcoli monetari del progetto usano ``Decimal``: nessun float entra mai
-nel motore commerciale, cosi' i totali sono riproducibili al centesimo.
+nel motore commerciale, così i totali sono riproducibili al centesimo.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ def parse_decimal(value: Number) -> Optional[Decimal]:
     """Converte un valore in ``Decimal`` accettando formati IT ed EN.
 
     Gestisce ``"1.234,56"``, ``"1,234.56"``, ``"9.749,30 EUR"``, ``"66,02%"``,
-    ``"(1.200,00)"`` (negativo contabile). Restituisce ``None`` se il valore e'
-    vuoto o non interpretabile: il chiamante decide se e' un dato mancante.
+    ``"(1.200,00)"`` (negativo contabile). Restituisce ``None`` se il valore è
+    vuoto o non interpretabile: il chiamante decide se è un dato mancante.
     """
     if value is None:
         return None
@@ -58,7 +58,7 @@ def parse_decimal(value: Number) -> Optional[Decimal]:
     last_comma = text.rfind(",")
 
     if last_dot >= 0 and last_comma >= 0:
-        # L'ultimo separatore presente e' quello decimale.
+        # L'ultimo separatore presente è quello decimale.
         if last_comma > last_dot:
             text = text.replace(".", "").replace(",", ".")
         else:

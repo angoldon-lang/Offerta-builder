@@ -3,9 +3,10 @@
 Comandi:
 
 * ``offerta form-init``  - crea il modello del form rapido da compilare
-* ``offerta bom``        - importa e normalizza una o piu' BOM (solo lettura)
+* ``offerta bom``        - importa e normalizza una o più BOM (solo lettura)
 * ``offerta build``      - flusso completo: BOM + form -> DOCX, QA, PDF, riepiloghi
-* ``offerta qa``         - riesegue i controlli su output gia' generati
+* ``offerta qa``         - riesegue i controlli su output già generati
+* ``offerta web``        - interfaccia grafica locale nel browser
 """
 
 from __future__ import annotations
@@ -75,7 +76,14 @@ def _build_parser() -> argparse.ArgumentParser:
     build.add_argument("--json", action="store_true", help="output di riepilogo in JSON")
     build.set_defaults(handler=_cmd_build)
 
-    qa_cmd = sub.add_parser("qa", help="mostra l'esito dei controlli gia' generati")
+    web = sub.add_parser("web", help="avvia l'interfaccia web locale")
+    web.add_argument("--porta", type=int, default=8000)
+    web.add_argument("--host", default="127.0.0.1", help="di default ascolta solo sul computer locale")
+    web.add_argument("--no-browser", action="store_true", help="non aprire il browser all'avvio")
+    web.add_argument("--debug", action="store_true")
+    web.set_defaults(handler=_cmd_web)
+
+    qa_cmd = sub.add_parser("qa", help="mostra l'esito dei controlli già generati")
     qa_cmd.add_argument("file", help="percorso di controlli_qa.json")
     qa_cmd.set_defaults(handler=_cmd_qa)
     return parser
@@ -109,7 +117,7 @@ def _cmd_bom(args: argparse.Namespace) -> int:
     for bom in boms:
         print(
             f"\n{bom.distributor} | quote {bom.quote_number or 'n/d'} | {len(bom.items)} righe | "
-            f"costo {format_eur(bom.total_cost())} | validita' {bom.valid_until or 'n/d'}"
+            f"costo {format_eur(bom.total_cost())} | validità {bom.valid_until or 'n/d'}"
         )
         for issue in bom.issues:
             print(f"  - [{issue.severity}] {issue.message}")
@@ -154,7 +162,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
             location = f" [{issue.where}]" if issue.where else ""
             print(f"  - {issue.message}{location}", file=sys.stderr)
         print(
-            "\nCorreggi i dati (o rilancia con --force per procedere assumendoti la responsabilita').",
+            "\nCorreggi i dati (o rilancia con --force per procedere assumendoti la responsabilità).",
             file=sys.stderr,
         )
         return EXIT_BLOCKED
@@ -164,6 +172,19 @@ def _cmd_build(args: argparse.Namespace) -> int:
     else:
         _print_summary(result)
     return EXIT_OK if result.qa.passed else EXIT_QA_FAILED
+
+
+def _cmd_web(args: argparse.Namespace) -> int:
+    try:
+        from .web import run
+    except ImportError:
+        print(
+            "Interfaccia web non disponibile: manca Flask. Installa con 'pip install -e .'",
+            file=sys.stderr,
+        )
+        return EXIT_BLOCKED
+    run(host=args.host, port=args.porta, open_browser=not args.no_browser, debug=args.debug)
+    return EXIT_OK
 
 
 def _cmd_qa(args: argparse.Namespace) -> int:

@@ -1,8 +1,8 @@
 """Da tabella grezza a ``NormalizedBom``.
 
-Regola guida: la BOM del distributore e' **costo di acquisto**, mai offerta al
+Regola guida: la BOM del distributore è **costo di acquisto**, mai offerta al
 cliente. Qui si ricostruiscono solo i dati mancanti che sono deducibili in modo
-aritmetico (netto = listino - sconto, totale = unitario x quantita'); tutto cio'
+aritmetico (netto = listino - sconto, totale = unitario x quantità); tutto cio'
 che resta ambiguo diventa una ``Issue`` e ferma il flusso.
 """
 
@@ -21,7 +21,7 @@ from ..models import (
     Issue,
     NormalizedBom,
 )
-from ..money import parse_decimal, q2, q4, relative_gap
+from ..money import format_eur, parse_decimal, q2, q4, relative_gap
 from .base import best_table, clean_cell, extract_meta
 from .columns import COLUMN_ALIASES
 from .distributors import GENERIC, detect_distributor, detect_vendor, profile_for
@@ -55,7 +55,7 @@ def normalize(
                 severity=SEVERITY_BLOCKING,
                 message=(
                     "Nessuna tabella riconoscibile nel file: intestazioni non trovate. "
-                    "Serve conferma manuale delle colonne (codice, quantita', netto)."
+                    "Serve conferma manuale delle colonne (codice, quantità, netto)."
                 ),
                 where=path,
             )
@@ -123,8 +123,8 @@ def normalize(
                 code="bom.no_validity",
                 severity=SEVERITY_WARNING,
                 message=(
-                    "Validita' della quotazione distributore non trovata: va confermata "
-                    "manualmente prima di fissare la validita' dell'offerta."
+                    "Validità della quotazione distributore non trovata: va confermata "
+                    "manualmente prima di fissare la validità dell'offerta."
                 ),
                 where=path,
             )
@@ -178,7 +178,7 @@ def _build_item(record: Dict[str, str], bom: NormalizedBom, cost_priority: str) 
             Issue(
                 code="bom.quantity_missing",
                 severity=SEVERITY_WARNING,
-                message=f"Quantita' assente per '{item.key()}': assunta 1, da confermare.",
+                message=f"Quantità assente per '{item.key()}': assunta 1, da confermare.",
                 where=f"riga {item.key()}",
             )
         )
@@ -188,7 +188,7 @@ def _build_item(record: Dict[str, str], bom: NormalizedBom, cost_priority: str) 
             Issue(
                 code="bom.quantity_invalid",
                 severity=SEVERITY_BLOCKING,
-                message=f"Quantita' non valida ({quantity}) per '{item.key()}'.",
+                message=f"Quantità non valida ({quantity}) per '{item.key()}'.",
                 where=f"riga {item.key()}",
             )
         )
@@ -224,14 +224,14 @@ def _derive_amounts(item: BomItem, bom: NormalizedBom, cost_priority: str) -> No
                     severity=SEVERITY_WARNING,
                     message=(
                         f"Totale listino incoerente per '{item.key()}': "
-                        f"letto {item.list_price_total}, atteso {expected}."
+                        f"letto {format_eur(item.list_price_total)}, atteso {format_eur(expected)}."
                     ),
                     where=where,
                     details={"letto": item.list_price_total, "atteso": expected},
                 )
             )
 
-    # Costo: unitario <-> totale, con priorita' da profilo distributore.
+    # Costo: unitario <-> totale, con priorità da profilo distributore.
     if item.cost_net_unit is not None and item.cost_net_total is None:
         item.cost_net_total = q2(item.cost_net_unit * qty)
     elif item.cost_net_total is not None and item.cost_net_unit is None and qty:
@@ -245,8 +245,9 @@ def _derive_amounts(item: BomItem, bom: NormalizedBom, cost_priority: str) -> No
                     code="bom.cost_mismatch",
                     severity=SEVERITY_WARNING,
                     message=(
-                        f"Netto incoerente per '{item.key()}': unitario x quantita' = {expected}, "
-                        f"totale in BOM = {item.cost_net_total}. Considerato autorevole il {authoritative}."
+                        f"Netto incoerente per '{item.key()}': unitario x quantità = {format_eur(expected)}, "
+                        f"totale in BOM = {format_eur(item.cost_net_total)}. "
+                        f"Considerato autorevole il {authoritative}."
                     ),
                     where=where,
                     details={"unitario_per_qta": expected, "totale_bom": item.cost_net_total},
@@ -280,7 +281,7 @@ def _derive_amounts(item: BomItem, bom: NormalizedBom, cost_priority: str) -> No
                     severity=SEVERITY_WARNING,
                     message=(
                         f"Sconto incoerente per '{item.key()}': con {item.discount_percent}% il netto "
-                        f"sarebbe {expected}, in BOM e' {item.cost_net_total}."
+                        f"sarebbe {format_eur(expected)}, in BOM è {format_eur(item.cost_net_total)}."
                     ),
                     where=where,
                     details={"netto_atteso": expected, "netto_bom": item.cost_net_total},
@@ -304,7 +305,7 @@ def _derive_amounts(item: BomItem, bom: NormalizedBom, cost_priority: str) -> No
             Issue(
                 code="bom.cost_negative",
                 severity=SEVERITY_BLOCKING,
-                message=f"Costo negativo per '{item.key()}': {item.cost_net_total}.",
+                message=f"Costo negativo per '{item.key()}': {format_eur(item.cost_net_total)}.",
                 where=where,
             )
         )

@@ -101,7 +101,7 @@ def build_internal_report(
 
     boms_info = "".join(
         f"<li>{html.escape(bom.distributor or 'n/d')} - quote {html.escape(bom.quote_number or 'n/d')}, "
-        f"validita' {html.escape(to_it(bom.valid_until) or 'n/d')}, "
+        f"validità {html.escape(to_it(bom.valid_until) or 'n/d')}, "
         f"{len(bom.items)} righe, costo {format_eur(bom.total_cost())} "
         f"({html.escape(bom.source_format)})</li>"
         for bom in offer.boms
@@ -132,7 +132,7 @@ generato il {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
 <table><thead><tr>
 <th class="num">#</th><th>Codice</th><th>Descrizione</th><th>Periodo</th><th class="num">Q.ta</th>
 <th class="num">Listino</th><th class="num">Sconto</th><th class="num">Costo</th><th class="num">Vendita</th>
-<th class="num">Margine</th><th class="num">Margine %</th><th>Modalita'</th>
+<th class="num">Margine</th><th class="num">Margine %</th><th>Modalità</th>
 </tr></thead><tbody>{''.join(rows)}</tbody>
 <tfoot><tr><td colspan="5">Totali</td>
 <td class="num">{format_eur(totals.total_list)}</td>
@@ -142,7 +142,7 @@ generato il {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
 <td class="num">{format_eur(totals.margin_value)}</td>
 <td class="num">{format_percent(totals.margin_percent)}</td><td></td></tr></tfoot></table>
 
-<h2>Riepilogo per annualita'</h2>
+<h2>Riepilogo per annualità</h2>
 <table><thead><tr><th>Periodo</th><th class="num">Costo</th><th class="num">Imponibile</th>
 <th class="num">IVA</th><th class="num">Totale</th></tr></thead><tbody>{annual_rows}</tbody></table>
 
@@ -154,7 +154,7 @@ generato il {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
 
 <h2>Condizioni</h2>
 <ul>
-<li>Validita' offerta: {html.escape(to_it(form.get('validita_offerta')) or 'n/d')}</li>
+<li>Validità offerta: {html.escape(to_it(form.get('validita_offerta')) or 'n/d')}</li>
 <li>Pagamento: {html.escape(str(form.get('tipologia_pagamento', '')))} - {html.escape(str(form.get('condizioni_pagamento', '')))}</li>
 <li>Fatturazione: {html.escape(str(form.get('fatturazione', '')))}</li>
 <li>Durata contratto: {html.escape(str(form.get('durata_contratto_anni', '')))} anni - rinnovo: {html.escape(str(form.get('rinnovo', '')))}</li>

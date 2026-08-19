@@ -56,7 +56,7 @@ def test_titoli_duplicati_da_heading(offerta, form_data):
 
 
 def test_importi_ripetuti_non_sono_titoli_duplicati(offerta, form_data):
-    """Prezzo unitario e totale coincidono con quantita' 1: e' legittimo."""
+    """Prezzo unitario e totale coincidono con quantità 1: è legittimo."""
     report = run_qa(offerta, form_data, document_text=documento(offerta, "1.500,00 EUR\n1.500,00 EUR"))
     assert check(report, "qa.titoli").level == LEVEL_OK
 

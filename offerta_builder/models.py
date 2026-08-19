@@ -1,8 +1,8 @@
 """Schema dati unico dell'Offer Builder.
 
-Il flusso e' sempre: BOM del distributore -> ``NormalizedBom`` (costo di
+Il flusso è sempre: BOM del distributore -> ``NormalizedBom`` (costo di
 acquisto) -> ``PricedOffer`` (prezzo cliente calcolato dal motore commerciale).
-Nessun modulo a valle inventa numeri: legge solo quello che c'e' qui dentro.
+Nessun modulo a valle inventa numeri: legge solo quello che c'è qui dentro.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class Issue:
 
 @dataclass
 class BomItem:
-    """Riga di BOM normalizzata: la parte 'costo' e' quella del distributore."""
+    """Riga di BOM normalizzata: la parte 'costo' è quella del distributore."""
 
     line_no: int = 0
     sku: str = ""
@@ -168,7 +168,7 @@ class AnnualBreakdown:
 
 @dataclass
 class PricedOffer:
-    """Risultato del motore commerciale: e' l'unica fonte di verita' numerica."""
+    """Risultato del motore commerciale: è l'unica fonte di verità numerica."""
 
     offer: Dict[str, Any] = field(default_factory=dict)
     items: List[BomItem] = field(default_factory=list)

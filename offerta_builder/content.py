@@ -1,8 +1,8 @@
 """Content Generator: i testi dell'offerta.
 
 Di default i testi sono deterministici (template + dati del form): stessi input,
-stesso documento. Se si attiva l'assistenza AI (``--ai``), il modello puo'
-riscrivere *solo* prosa gia' delimitata, e l'output passa dal guard numerico:
+stesso documento. Se si attiva l'assistenza AI (``--ai``), il modello può
+riscrivere *solo* prosa già delimitata, e l'output passa dal guard numerico:
 ogni numero non presente nei dati calcolati fa scartare la riscrittura.
 """
 
@@ -18,14 +18,14 @@ from .models import SEVERITY_WARNING, Issue, PricedOffer
 from .money import format_eur
 
 REQUISITI_STANDARD = [
-    "Disponibilita' di un referente tecnico del Cliente per tutta la durata delle attivita'.",
+    "Disponibilità di un referente tecnico del Cliente per tutta la durata delle attività.",
     "Accessi fisici e logici agli ambienti oggetto di fornitura, concordati preventivamente.",
     "Prerequisiti hardware, software e di rete conformi alle specifiche del produttore.",
     "Finestre di manutenzione concordate con almeno 5 giorni lavorativi di preavviso.",
 ]
 
 ESCLUSIONI_STANDARD = [
-    "Attivita' non esplicitamente indicate nella presente offerta.",
+    "Attività non esplicitamente indicate nella presente offerta.",
     "Trasferte, vitto e alloggio, se non diversamente specificato.",
     "Materiale elettrico, cablaggi e opere murarie.",
     "Licenze, sottoscrizioni e servizi di terze parti non elencati nell'offerta economica.",
@@ -83,7 +83,7 @@ def _premessa(cliente: str, oggetto: str, vendor: str, durata: Any, form: Dict[s
         f"{apertura}\n"
         f"facendo seguito alla Vostra cortese richiesta, siamo lieti di sottoporre a {soggetto} "
         f"la presente offerta relativa a: {oggetto}{tecnologia}{anni}.\n"
-        "La soluzione proposta e' stata dimensionata sulla base delle informazioni ricevute e "
+        "La soluzione proposta è stata dimensionata sulla base delle informazioni ricevute e "
         "delle configurazioni concordate; le condizioni economiche e contrattuali di riferimento "
         "sono riportate nelle sezioni seguenti."
     )
@@ -101,7 +101,7 @@ def _descrizione_fornitura(offer: PricedOffer, vendor: str) -> str:
     marchio = f" a marchio {vendor}" if vendor else ""
     return (
         f"La fornitura{marchio} comprende le seguenti tipologie di componenti: {elenco}. "
-        "Il dettaglio completo, con codici, quantita' e prezzi, e' riportato nell'offerta economica."
+        "Il dettaglio completo, con codici, quantità e prezzi, è riportato nell'offerta economica."
     )
 
 
@@ -204,7 +204,7 @@ AI_SYSTEM_PROMPT = (
     "Sei l'assistente di redazione di offerte commerciali di un system integrator italiano. "
     "Riscrivi il testo fornito in italiano professionale, chiaro e sintetico. "
     "REGOLE INDEROGABILI: non introdurre, modificare o dedurre cifre, prezzi, percentuali, "
-    "date, quantita' o condizioni contrattuali; non aggiungere impegni, garanzie o SLA non "
+    "date, quantità o condizioni contrattuali; non aggiungere impegni, garanzie o SLA non "
     "presenti nel testo originale. Restituisci solo il testo riscritto, senza commenti."
 )
 
@@ -229,7 +229,7 @@ def refine_with_ai(
             Issue(
                 code="content.ai_no_key",
                 severity=SEVERITY_WARNING,
-                message="Assistenza AI richiesta ma ANTHROPIC_API_KEY non e' impostata: testi deterministici.",
+                message="Assistenza AI richiesta ma ANTHROPIC_API_KEY non è impostata: testi deterministici.",
             )
         )
         return issues

@@ -1,7 +1,7 @@
 """Motore commerciale: dal costo di acquisto al prezzo cliente.
 
 Tutti i numeri dell'offerta nascono qui e solo qui. L'AI non entra in questo
-modulo: puo' scrivere testi, non prezzi. Le modalita' supportate sono tre e si
+modulo: può scrivere testi, non prezzi. Le modalità supportate sono tre e si
 possono combinare per riga:
 
 * ``markup``        - ricarico sul costo (``prezzo = costo * (1 + markup%)``)
@@ -27,7 +27,7 @@ from .models import (
     PricedOffer,
     ServiceLine,
 )
-from .money import q2, q4
+from .money import format_percent, q2, q4
 
 MODE_MARKUP = "markup"
 MODE_TARGET_MARGIN = "target_margin"
@@ -102,7 +102,7 @@ def price_offer(
             Issue(
                 code="pricing.mode_unknown",
                 severity=SEVERITY_BLOCKING,
-                message=f"Modalita' di prezzo sconosciuta: '{policy.mode}'. Ammesse: {sorted(MODES)}.",
+                message=f"Modalità di prezzo sconosciuta: '{policy.mode}'. Ammesse: {sorted(MODES)}.",
             )
         )
         return result
@@ -165,7 +165,7 @@ def _price_line(item: BomItem, policy: PricingPolicy, result: PricedOffer) -> Bo
                 code="pricing.manual_missing",
                 severity=SEVERITY_BLOCKING,
                 message=(
-                    f"Modalita' manuale senza prezzo per '{item.key()}': indica sell_net_unit "
+                    f"Modalità manuale senza prezzo per '{item.key()}': indica sell_net_unit "
                     "o sell_net_total nelle deroghe di riga."
                 ),
                 where=f"riga {item.line_no} - {item.key()}",
@@ -216,7 +216,7 @@ def _price_service(service: ServiceLine, policy: PricingPolicy, result: PricedOf
             Issue(
                 code="pricing.service_zero",
                 severity=SEVERITY_WARNING,
-                message=f"Servizio '{service.description}' valorizzato a zero: confermare se e' incluso.",
+                message=f"Servizio '{service.description}' valorizzato a zero: confermare se è incluso.",
             )
         )
     return item
@@ -247,7 +247,7 @@ def _totals(items: List[BomItem]) -> OfferTotals:
 
 
 def _annual_breakdown(items: List[BomItem], policy: PricingPolicy) -> List[AnnualBreakdown]:
-    """Riepilogo per annualita': per periodo se presente, altrimenti per durata."""
+    """Riepilogo per annualità: per periodo se presente, altrimenti per durata."""
     grouped: Dict[str, List[BomItem]] = {}
     for item in items:
         if item.period:
@@ -292,12 +292,12 @@ def _annual_breakdown(items: List[BomItem], policy: PricingPolicy) -> List[Annua
             net = q2(totals.total_net / years)
             cost = q2(totals.total_cost / years)
             vat = q2(totals.total_vat / years)
-        else:  # l'ultima annualita' assorbe gli arrotondamenti
+        else:  # l'ultima annualità assorbe gli arrotondamenti
             net, cost, vat = net_left, cost_left, vat_left
         net_left, cost_left, vat_left = q2(net_left - net), q2(cost_left - cost), q2(vat_left - vat)
         breakdown.append(
             AnnualBreakdown(
-                label=f"Annualita' {year} di {years}",
+                label=f"Annualità {year} di {years}",
                 total_net=net,
                 total_cost=cost,
                 total_vat=vat,
@@ -318,8 +318,8 @@ def _check_thresholds(result: PricedOffer, policy: PricingPolicy) -> None:
                     code="pricing.margin_below_threshold",
                     severity=SEVERITY_WARNING,
                     message=(
-                        f"Margine riga '{item.key()}' al {item.margin_percent}%, "
-                        f"sotto la soglia minima del {threshold}%."
+                        f"Margine riga '{item.key()}' al {format_percent(item.margin_percent)}, "
+                        f"sotto la soglia minima del {format_percent(threshold)}."
                     ),
                     where=f"riga {item.line_no or '-'} - {item.key()}",
                     details={"margine": item.margin_percent, "soglia": threshold},
@@ -331,8 +331,8 @@ def _check_thresholds(result: PricedOffer, policy: PricingPolicy) -> None:
                 code="pricing.total_margin_below_threshold",
                 severity=SEVERITY_BLOCKING,
                 message=(
-                    f"Margine totale offerta al {result.totals.margin_percent}%, "
-                    f"sotto la soglia minima del {threshold}%: serve approvazione esplicita."
+                    f"Margine totale offerta al {format_percent(result.totals.margin_percent)}, "
+                    f"sotto la soglia minima del {format_percent(threshold)}: serve approvazione esplicita."
                 ),
                 details={"margine": result.totals.margin_percent, "soglia": threshold},
             )

@@ -44,7 +44,7 @@ def test_arrotondamento_half_up():
 
 
 def test_punto_su_tre_cifre_letto_come_migliaia():
-    """Convenzione IT: '1.005' e' millecinque, non uno virgola zerozerocinque."""
+    """Convenzione IT: '1.005' è millecinque, non uno virgola zerozerocinque."""
     assert parse_decimal("1.005") == Decimal("1005")
     assert parse_decimal("1.5") == Decimal("1.5")
     assert parse_decimal("28692.00") == Decimal("28692.00")

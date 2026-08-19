@@ -1,6 +1,6 @@
 """Offer Builder controllato: BOM distributori -> offerta DOCX/PDF.
 
-Il perimetro e' netto: l'AI aiuta a interpretare i file e a scrivere i testi,
+Il perimetro è netto: l'AI aiuta a interpretare i file e a scrivere i testi,
 mentre calcoli, margini, IVA, date e condizioni sono gestiti da regole
 deterministiche (moduli ``pricing``, ``qa``, ``dates``, ``money``).
 """

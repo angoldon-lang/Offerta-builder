@@ -83,7 +83,7 @@ def _read_csv(path: str) -> List[RawTable]:
     tables = _split_matrix(matrix, path, "csv")
     if not tables:
         # Nessuna intestazione riconosciuta: restituiamo comunque il grezzo,
-        # cosi' il normalizzatore puo' segnalare il problema all'utente.
+        # così il normalizzatore può segnalare il problema all'utente.
         tables.append(RawTable(source=path, fmt="csv", header=[], rows=matrix, score=0))
     return tables
 
@@ -129,7 +129,7 @@ def _read_pdf(path: str) -> List[RawTable]:
         tables.extend(_tables_from_text(full_text, path))
 
     for table in tables:
-        # La testata del PDF (numero quote, end user, validita') sta nel testo.
+        # La testata del PDF (numero quote, end user, validità) sta nel testo.
         table.meta_text = (table.meta_text + "\n" + full_text).strip()
     return tables
 

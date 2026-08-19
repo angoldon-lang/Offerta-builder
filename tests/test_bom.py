@@ -14,7 +14,7 @@ def test_import_csv_vvalley(csv_bom_path):
     assert bom.valid_until == "2026-07-31"
     assert bom.vendor == "SolarWinds"
     assert bom.currency == "EUR"
-    assert len(bom.items) == 4  # la riga "Totale" non e' un articolo
+    assert len(bom.items) == 4  # la riga "Totale" non è un articolo
     assert bom.total_cost() == Decimal("18924.56")
     assert not bom.blocking_issues
 

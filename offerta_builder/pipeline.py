@@ -1,6 +1,6 @@
 """Orchestrazione del flusso: BOM -> form -> prezzi -> DOCX -> QA -> output.
 
-Il flusso e' volutamente a cancelli: ogni fase che trova un problema bloccante
+Il flusso è volutamente a cancelli: ogni fase che trova un problema bloccante
 si ferma e chiede conferma, invece di tirare a indovinare.
 """
 
@@ -40,11 +40,20 @@ OUTPUT_NAMES = {
 
 
 class BlockingError(RuntimeError):
-    """Il flusso si e' fermato: servono conferme o correzioni dell'operatore."""
+    """Il flusso si è fermato: servono conferme o correzioni dell'operatore."""
 
     def __init__(self, message: str, issues: Sequence[Issue] = ()):
         super().__init__(message)
         self.issues = list(issues)
+
+
+@dataclass
+class PreparedOffer:
+    """Offerta calcolata ma non ancora scritta su disco."""
+
+    form: Dict[str, Any]
+    offer: PricedOffer
+    issues: List[Issue] = field(default_factory=list)
 
 
 @dataclass
@@ -94,7 +103,7 @@ def _services_from_form(form: Dict[str, Any]) -> List[ServiceLine]:
     services: List[ServiceLine] = []
     for raw in form.get("servizi_aggiuntivi") or []:
         if isinstance(raw, str):
-            continue  # senza prezzo non e' una riga d'offerta: resta testo descrittivo
+            continue  # senza prezzo non è una riga d'offerta: resta testo descrittivo
         if not isinstance(raw, dict) or not str(raw.get("descrizione", "")).strip():
             continue
         services.append(
@@ -111,30 +120,19 @@ def _services_from_form(form: Dict[str, Any]) -> List[ServiceLine]:
     return services
 
 
-def build_offer(
-    bom_paths: Sequence[str],
+def prepare_offer(
+    boms: Sequence[NormalizedBom],
     form: Dict[str, Any],
-    output_dir: str,
-    template_path: Optional[str] = None,
     pricing_overrides: Optional[Dict[str, Any]] = None,
-    use_ai: bool = False,
     force: bool = False,
-    make_pdf: bool = False,
-    approve: Optional[Callable[[BuildResult], bool]] = None,
-) -> BuildResult:
-    """Esegue l'intero flusso e scrive gli output nella cartella indicata.
+) -> "PreparedOffer":
+    """Valida il form e calcola i prezzi, senza scrivere nulla su disco.
 
-    Il deliverable e' il DOCX: resta modificabile a mano prima dell'invio. Il
-    PDF si genera solo con ``make_pdf=True``, e comunque solo a QA superato.
-
-    ``force=True`` prosegue anche in presenza di anomalie bloccanti (import,
-    form o QA), registrandole comunque negli output.
+    È la parte del flusso che si può rieseguire a ogni modifica dei dati:
+    la usa l'anteprima della UI web, e la riusa ``build_offer``.
     """
-    os.makedirs(output_dir, exist_ok=True)
     issues: List[Issue] = []
 
-    # 1. Import BOM ---------------------------------------------------------
-    boms = import_boms(bom_paths)
     bom_blocking = [i for bom in boms for i in bom.blocking_issues]
     if bom_blocking and not force:
         raise BlockingError(
@@ -142,7 +140,6 @@ def build_offer(
         )
     issues.extend(bom_blocking)
 
-    # 2. Form ---------------------------------------------------------------
     form = prefill_from_bom(form, boms)
     clean_form, form_issues = validate(form)
     issues.extend(form_issues)
@@ -150,12 +147,45 @@ def build_offer(
     if form_blocking and not force:
         raise BlockingError("Form incompleto o non valido.", form_blocking)
 
-    # 3. Prezzi -------------------------------------------------------------
     policy = policy_from_form(clean_form, pricing_overrides)
     offer = price_offer(boms, policy, offer=_offer_meta(clean_form))
     pricing_blocking = [i for i in offer.issues if i.severity == SEVERITY_BLOCKING]
     if pricing_blocking and not force:
         raise BlockingError("Motore commerciale bloccato.", pricing_blocking)
+
+    return PreparedOffer(form=clean_form, offer=offer, issues=issues)
+
+
+def build_offer(
+    bom_paths: Sequence[str] = (),
+    form: Optional[Dict[str, Any]] = None,
+    output_dir: str = "out",
+    template_path: Optional[str] = None,
+    pricing_overrides: Optional[Dict[str, Any]] = None,
+    use_ai: bool = False,
+    force: bool = False,
+    make_pdf: bool = False,
+    approve: Optional[Callable[[BuildResult], bool]] = None,
+    boms: Optional[Sequence[NormalizedBom]] = None,
+) -> BuildResult:
+    """Esegue l'intero flusso e scrive gli output nella cartella indicata.
+
+    Le BOM si passano come percorsi (``bom_paths``) oppure già normalizzate
+    (``boms``), per non rileggere i file a ogni rigenerazione.
+
+    Il deliverable è il DOCX: resta modificabile a mano prima dell'invio. Il
+    PDF si genera solo con ``make_pdf=True``, e comunque solo a QA superato.
+
+    ``force=True`` prosegue anche in presenza di anomalie bloccanti (import,
+    form o QA), registrandole comunque negli output.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 1-3. Import BOM, form e prezzi ----------------------------------------
+    if boms is None:
+        boms = import_boms(bom_paths)
+    prepared = prepare_offer(boms, form or {}, pricing_overrides, force=force)
+    clean_form, offer, issues = prepared.form, prepared.offer, prepared.issues
 
     # 4. Testi --------------------------------------------------------------
     generated = content_module.build_content(offer, clean_form)

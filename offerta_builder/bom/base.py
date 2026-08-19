@@ -84,7 +84,7 @@ def extract_meta(text: str) -> Dict[str, str]:
     """Estrae dai testi di intestazione i dati di testata della BOM.
 
     Restituisce solo cio' che trova davvero: i campi assenti restano fuori dal
-    dizionario, cosi' il normalizzatore sa che deve chiederli.
+    dizionario, così il normalizzatore sa che deve chiederli.
     """
     meta: Dict[str, str] = {}
     if not text:
@@ -103,7 +103,7 @@ def extract_meta(text: str) -> Dict[str, str]:
 
 
 def best_table(tables: List[RawTable]) -> Optional[RawTable]:
-    """Sceglie la tabella piu' plausibile fra quelle estratte da un file."""
+    """Sceglie la tabella più plausibile fra quelle estratte da un file."""
     scored = [t for t in tables if t.rows and t.header]
     if not scored:
         return None

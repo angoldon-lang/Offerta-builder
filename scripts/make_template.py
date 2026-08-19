@@ -38,7 +38,7 @@ def build(path: str = OUTPUT) -> str:
         ("Referente", "{{ referente }}"),
         ("Riferimento offerta", "{{ riferimento_offerta }}"),
         ("Data offerta", "{{ data_offerta }}"),
-        ("Validita' offerta", "{{ validita_offerta }}"),
+        ("Validità offerta", "{{ validita_offerta }}"),
         ("Autore", "{{ autore }}"),
     ]:
         cells = cover.add_row().cells
@@ -95,7 +95,7 @@ def build(path: str = OUTPUT) -> str:
         cells[0].paragraphs[0].add_run(label).bold = True
         cells[1].paragraphs[0].add_run(placeholder).bold = True
 
-    document.add_heading("Riepilogo per annualita'", level=2)
+    document.add_heading("Riepilogo per annualità", level=2)
     annual = document.add_table(rows=4, cols=4)
     annual.style = "Table Grid"
     for index, header in enumerate(["Periodo", "Imponibile", "IVA", "Totale"]):
@@ -113,7 +113,7 @@ def build(path: str = OUTPUT) -> str:
     conditions = document.add_table(rows=0, cols=2)
     conditions.style = "Table Grid"
     for label, placeholder in [
-        ("Validita' offerta", "{{ validita_offerta }}"),
+        ("Validità offerta", "{{ validita_offerta }}"),
         ("Tipologia di pagamento", "{{ tipologia_pagamento }}"),
         ("Condizioni di pagamento", "{{ condizioni_pagamento }}"),
         ("Fatturazione", "{{ fatturazione }}"),

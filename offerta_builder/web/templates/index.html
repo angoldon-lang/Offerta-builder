@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offerta Builder</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128196;</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <span>
+      <strong>Offerta Builder</strong>
+      <em>BOM distributore &rarr; offerta AD</em>
+    </span>
+  </div>
+  <div class="topbar-actions">
+    <span id="stato-sessione" class="hint"></span>
+    <button type="button" id="btn-nuova" class="ghost">Nuova offerta</button>
+  </div>
+</header>
+
+<div class="shell">
+  <main class="work">
+
+    <!-- 1. FILE -->
+    <section class="card" id="card-file">
+      <h2><span class="step">1</span> File</h2>
+      <p class="sub">Carica le BOM dei distributori e, se vuoi, il template Word dell'offerta.</p>
+
+      <div class="drops">
+        <label class="drop" id="drop-bom">
+          <input type="file" id="input-bom" multiple hidden>
+          <strong>BOM distributore</strong>
+          <span>Trascina qui oppure clicca &middot; CSV, XLSX, PDF &middot; anche più file</span>
+        </label>
+        <label class="drop" id="drop-template">
+          <input type="file" id="input-template" accept=".docx" hidden>
+          <strong>Template Word</strong>
+          <span>Trascina qui oppure clicca &middot; .docx con i segnaposto</span>
+          <span class="tag" id="tag-template" hidden></span>
+        </label>
+      </div>
+
+      <div id="errori-upload" class="alert error" hidden></div>
+      <div id="elenco-bom" class="bom-list"></div>
+    </section>
+
+    <!-- 2. DATI -->
+    <section class="card" id="card-dati">
+      <h2><span class="step">2</span> Dati offerta</h2>
+      <p class="sub">I campi con <span class="req">*</span> sono obbligatori: senza, la generazione si ferma.</p>
+      <div id="gruppi-form"></div>
+    </section>
+
+    <!-- 3. PREZZI -->
+    <section class="card" id="card-prezzi">
+      <h2><span class="step">3</span> Prezzi</h2>
+      <p class="sub">Il prezzo al cliente si calcola dal costo di acquisto della BOM. I conti li fa il backend, sempre.</p>
+
+      <div class="grid-3" id="controlli-prezzo"></div>
+
+      <h3>Servizi aggiuntivi</h3>
+      <div id="servizi"></div>
+      <button type="button" class="ghost" id="btn-aggiungi-servizio">+ Aggiungi servizio</button>
+
+      <h3>Righe dell'offerta</h3>
+      <p class="sub" id="nota-righe">Il prezzo unitario è modificabile riga per riga: diventa una deroga manuale.</p>
+      <div class="table-scroll">
+        <table id="tabella-righe">
+          <thead>
+            <tr>
+              <th>#</th><th>Codice</th><th>Descrizione</th><th class="num">Q.ta</th>
+              <th class="num">Costo</th><th class="num">Prezzo unitario</th><th class="num">Totale</th>
+              <th class="num">Margine</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. GENERA -->
+    <section class="card" id="card-genera">
+      <h2><span class="step">4</span> Genera e controlla</h2>
+      <div class="opzioni">
+        <label class="check"><input type="checkbox" id="opt-pdf"> Genera anche il PDF <span class="hint">(richiede LibreOffice)</span></label>
+        <label class="check"><input type="checkbox" id="opt-ai"> Riscrittura assistita dei testi <span class="hint">(richiede ANTHROPIC_API_KEY)</span></label>
+        <label class="check"><input type="checkbox" id="opt-force"> Procedi anche con anomalie bloccanti</label>
+      </div>
+      <button type="button" id="btn-genera" class="primary big">Genera offerta</button>
+
+      <div id="esito" hidden>
+        <div id="qa-riepilogo"></div>
+        <ul id="qa-lista" class="checks"></ul>
+        <div id="download" class="downloads"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- RIEPILOGO -->
+  <aside class="summary">
+    <div class="panel">
+      <h3>Riepilogo</h3>
+      <dl id="totali">
+        <div><dt>Costo acquisto</dt><dd id="t-costo">&mdash;</dd></div>
+        <div><dt>Imponibile</dt><dd id="t-imponibile">&mdash;</dd></div>
+        <div><dt>IVA</dt><dd id="t-iva">&mdash;</dd></div>
+        <div class="big-row"><dt>Totale offerta</dt><dd id="t-totale">&mdash;</dd></div>
+        <div><dt>Margine</dt><dd id="t-margine">&mdash;</dd></div>
+      </dl>
+      <div id="barra-margine" class="margin-bar" hidden>
+        <div class="fill"></div>
+        <span class="soglia"></span>
+      </div>
+      <p id="msg-anteprima" class="hint">Carica una BOM per vedere i totali.</p>
+      <button type="button" id="btn-genera-2" class="primary">Genera offerta</button>
+      <div id="anomalie" class="anomalies"></div>
+    </div>
+  </aside>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
