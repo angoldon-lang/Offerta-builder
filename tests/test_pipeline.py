@@ -1,0 +1,97 @@
+import json
+import os
+from decimal import Decimal
+
+import pytest
+
+from offerta_builder.docx_builder import extract_text
+from offerta_builder.pipeline import BlockingError, build_offer, policy_from_form
+from offerta_builder.qa import LEVEL_FAIL
+
+
+def test_flusso_completo_senza_template(tmp_path, csv_bom_path, form_data):
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path), make_pdf=False
+    )
+    for chiave in ("docx", "bom", "qa", "data", "report"):
+        assert os.path.exists(result.outputs[chiave]), chiave
+    assert result.qa.status != LEVEL_FAIL
+    testo = extract_text(result.outputs["docx"])
+    assert "BPER BANCA SPA" in testo
+    assert "OFF_ADC_26/0313_R03" in testo
+    assert "{{" not in testo
+
+
+def test_flusso_completo_con_template(tmp_path, csv_bom_path, form_data, template_path):
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path),
+        template_path=template_path, make_pdf=False,
+    )
+    testo = extract_text(result.outputs["docx"])
+    assert "2078005" in testo  # le righe della BOM finiscono nella tabella
+    assert "{{" not in testo and "{%" not in testo
+    assert result.qa.status != LEVEL_FAIL
+
+
+def test_output_json_coerenti_con_i_totali(tmp_path, csv_bom_path, form_data):
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path), make_pdf=False
+    )
+    dati = json.load(open(result.outputs["data"], encoding="utf-8"))
+    somma_righe = round(sum(riga["sell_net_total"] for riga in dati["items"]), 2)
+    assert somma_righe == dati["totals"]["total_net"]
+    qa = json.load(open(result.outputs["qa"], encoding="utf-8"))
+    assert qa["status"] in {"ok", "warn", "fail"}
+
+
+def test_form_incompleto_ferma_il_flusso(tmp_path, csv_bom_path, form_data):
+    form_data["condizioni_pagamento"] = ""
+    with pytest.raises(BlockingError) as exc:
+        build_offer(bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path), make_pdf=False)
+    assert any(i.code == "form.missing_required" for i in exc.value.issues)
+
+
+def test_bom_incompleta_ferma_il_flusso(tmp_path, form_data):
+    bom_path = tmp_path / "bom.csv"
+    bom_path.write_text("Codice;Descrizione;Q.ta\nAAA;Licenza;1\n", encoding="utf-8")
+    with pytest.raises(BlockingError):
+        build_offer(bom_paths=[str(bom_path)], form=form_data, output_dir=str(tmp_path), make_pdf=False)
+
+
+def test_force_prosegue_nonostante_le_anomalie(tmp_path, form_data):
+    bom_path = tmp_path / "bom.csv"
+    bom_path.write_text("Codice;Descrizione;Q.ta\nAAA;Licenza;1\n", encoding="utf-8")
+    result = build_offer(
+        bom_paths=[str(bom_path)], form=form_data, output_dir=str(tmp_path), make_pdf=False, force=True
+    )
+    assert os.path.exists(result.outputs["docx"])
+    assert result.qa.status == LEVEL_FAIL  # l'anomalia resta tracciata
+
+
+def test_pdf_non_generato_se_il_qa_fallisce(tmp_path, csv_bom_path, form_data):
+    form_data["margine_minimo_percento"] = 95  # irraggiungibile: QA in errore
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path), make_pdf=True, force=True
+    )
+    # force=True supera il blocco di pricing; il QA resta rosso e va registrato
+    assert result.qa.status == LEVEL_FAIL
+
+
+def test_policy_da_form_e_override_cli(form_data):
+    policy = policy_from_form(form_data, {"mode": "target_margin", "target_margin_percent": "45"})
+    assert policy.mode == "target_margin"
+    assert policy.target_margin_percent == Decimal("45")
+    assert policy.vat_percent == Decimal("22")
+    assert policy.contract_years == 3
+
+
+def test_servizi_dal_form_diventano_righe(tmp_path, csv_bom_path, form_data):
+    form_data["servizi_aggiuntivi"] = [
+        {"descrizione": "Installazione", "quantita": 1, "prezzo_unitario": 2000, "costo_unitario": 800}
+    ]
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path), make_pdf=False
+    )
+    servizi = [i for i in result.offer.items if i.pricing_mode == "servizio"]
+    assert len(servizi) == 1
+    assert servizi[0].sell_net_total == Decimal("2000.00")

@@ -1,0 +1,67 @@
+{
+  "cliente": "BPER BANCA SPA",
+  "piva": "03830780361",
+  "indirizzo_cliente": "Via San Carlo 8/20, 41121 Modena (MO)",
+  "referente": "Serena Piantoni",
+  "email_referente": "",
+  "oggetto": "Fornitura Soluzione SolarWinds",
+  "autore": "Andrea Goldoni",
+  "riferimento_offerta": "OFF_ADC_26/0313_R03",
+  "data_offerta": "19/07/2026",
+  "validita_offerta": "31/07/2026",
+  "tipologia_pagamento": "Bonifico bancario",
+  "condizioni_pagamento": "30 gg fine mese",
+  "fatturazione": "Annuale anticipata",
+  "durata_contratto_anni": 3,
+  "iva_percento": 22,
+  "margine_minimo_percento": 25,
+  "rinnovo": "da concordare",
+  "servizi_aggiuntivi": [
+    {
+      "descrizione": "Installazione e configurazione della piattaforma di monitoraggio",
+      "quantita": 1,
+      "prezzo_unitario": 4500,
+      "costo_unitario": 1800,
+      "categoria": "Servizi professionali"
+    },
+    {
+      "descrizione": "Supporto specialistico e affiancamento (canone annuo)",
+      "quantita": 3,
+      "prezzo_unitario": 1800,
+      "costo_unitario": 700,
+      "categoria": "Servizi ricorrenti"
+    }
+  ],
+  "requisiti_cliente": [
+    "Accesso VPN agli ambienti di monitoraggio per il personale tecnico incaricato.",
+    "Disponibilita' di una macchina virtuale conforme ai requisiti SolarWinds.",
+    "Referente tecnico del Cliente disponibile durante le attivita' di installazione."
+  ],
+  "esclusioni": [
+    "Attivita' non esplicitamente indicate nella presente offerta.",
+    "Trasferte, vitto e alloggio, se non diversamente specificato.",
+    "Materiale elettrico, cablaggi e opere murarie."
+  ],
+  "note_commerciali": [
+    "Prezzi vincolati alla quotazione del distributore e alla sua validita'.",
+    "Le sottoscrizioni non sono svincolabili prima della scadenza del periodo contrattuale."
+  ],
+  "allegati": [
+    "Condizioni generali di fornitura",
+    "Informativa privacy"
+  ],
+  "premessa": "",
+  "pricing": {
+    "mode": "target_margin",
+    "markup_percent": 0,
+    "target_margin_percent": 32,
+    "rounding": "0.01",
+    "overrides": [
+      {
+        "match": "SW-SUP-PREM",
+        "mode": "markup",
+        "markup_percent": 25
+      }
+    ]
+  }
+}
