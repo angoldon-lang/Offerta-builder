@@ -50,6 +50,9 @@ invece di stimare.
 pip install -e .            # oppure: pip install -r requirements.txt
 ```
 
+Per l'installazione passo passo (Windows, macOS, Linux), prerequisiti e problemi
+frequenti: **[INSTALL.md](INSTALL.md)**.
+
 Il deliverable normale e' il **DOCX**, cosi' resta modificabile a mano prima
 dell'invio. Il PDF e' opzionale (`--pdf`) e richiede LibreOffice **con il modulo
 Writer**:

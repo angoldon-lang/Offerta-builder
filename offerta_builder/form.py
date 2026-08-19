@@ -120,6 +120,7 @@ def load_form(path: str) -> Dict[str, Any]:
 
 
 def save_form(path: str, data: Dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(data, handle, indent=2, ensure_ascii=False, default=str)
         handle.write("\n")

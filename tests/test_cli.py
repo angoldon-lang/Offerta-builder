@@ -55,3 +55,15 @@ def test_build_con_form_incompleto_si_ferma(tmp_path, csv_bom_path, form_data):
     form_path.write_text(json.dumps(form_data), encoding="utf-8")
     code = main(["build", "--bom", csv_bom_path, "--form", str(form_path), "-o", str(tmp_path)])
     assert code == EXIT_BLOCKED
+
+
+def test_form_init_crea_le_cartelle_mancanti(tmp_path):
+    target = tmp_path / "offerte" / "bper" / "form.json"
+    assert main(["form-init", "-o", str(target)]) == EXIT_OK
+    assert target.exists()
+
+
+def test_bom_crea_le_cartelle_mancanti(tmp_path, csv_bom_path):
+    target = tmp_path / "nuova" / "bom.json"
+    assert main(["bom", csv_bom_path, "-o", str(target)]) == EXIT_OK
+    assert target.exists()

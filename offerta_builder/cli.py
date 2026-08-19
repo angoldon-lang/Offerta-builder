@@ -97,6 +97,7 @@ def _cmd_bom(args: argparse.Namespace) -> int:
     boms = import_boms(args.files, distributor_hint=args.distributore, vendor_hint=args.vendor)
     payload = {"boms": [bom.to_dict() for bom in boms]}
     if args.output:
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)) or ".", exist_ok=True)
         with open(args.output, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2, ensure_ascii=False)
             handle.write("\n")
