@@ -68,7 +68,8 @@ def _build_parser() -> argparse.ArgumentParser:
     build.add_argument("--markup", default=None, help="ricarico %% sul costo")
     build.add_argument("--margine", default=None, help="margine obiettivo %% sul venduto")
     build.add_argument("--arrotondamento", default=None, choices=["none", "0.01", "0.05", "1", "5", "10", "100"])
-    build.add_argument("--no-pdf", action="store_true", help="non generare il PDF")
+    build.add_argument("--pdf", action="store_true",
+                       help="genera anche il PDF (solo a QA superato); di default esce solo il DOCX")
     build.add_argument("--ai", action="store_true", help="riscrittura assistita dei testi discorsivi")
     build.add_argument("--force", action="store_true", help="prosegue anche con anomalie bloccanti")
     build.add_argument("--json", action="store_true", help="output di riepilogo in JSON")
@@ -143,7 +144,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
             pricing_overrides=pricing_overrides,
             use_ai=args.ai,
             force=args.force,
-            make_pdf=not args.no_pdf,
+            make_pdf=args.pdf,
             approve=approve,
         )
     except BlockingError as exc:
@@ -228,7 +229,12 @@ def _print_summary(result: BuildResult) -> None:
     for key, path in result.outputs.items():
         print(f"  {key:7s} {os.path.abspath(path)}")
     if "pdf" not in result.outputs:
-        print("  pdf     non generato (QA non superato, approvazione mancante o --no-pdf)")
+        bloccato = any(issue.code.startswith("pipeline.pdf") for issue in result.issues)
+        print(
+            "  pdf     non generato: vedi le note di flusso qui sopra"
+            if bloccato
+            else "  pdf     non richiesto (usa --pdf a offerta chiusa)"
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

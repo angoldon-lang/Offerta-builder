@@ -38,7 +38,7 @@ def test_build_da_cli(tmp_path, csv_bom_path, form_data):
     out_dir = tmp_path / "out"
     code = main([
         "build", "--bom", csv_bom_path, "--form", str(form_path),
-        "-o", str(out_dir), "--no-pdf", "--modo", "markup", "--markup", "45",
+        "-o", str(out_dir), "--modo", "markup", "--markup", "45",
     ])
     assert code == EXIT_OK
     assert os.path.exists(out_dir / "offerta.docx")
@@ -46,12 +46,12 @@ def test_build_da_cli(tmp_path, csv_bom_path, form_data):
 
 
 def test_build_senza_form_si_ferma(tmp_path, csv_bom_path):
-    assert main(["build", "--bom", csv_bom_path, "-o", str(tmp_path), "--no-pdf"]) == EXIT_BLOCKED
+    assert main(["build", "--bom", csv_bom_path, "-o", str(tmp_path)]) == EXIT_BLOCKED
 
 
 def test_build_con_form_incompleto_si_ferma(tmp_path, csv_bom_path, form_data):
     form_data["riferimento_offerta"] = ""
     form_path = tmp_path / "form.json"
     form_path.write_text(json.dumps(form_data), encoding="utf-8")
-    code = main(["build", "--bom", csv_bom_path, "--form", str(form_path), "-o", str(tmp_path), "--no-pdf"])
+    code = main(["build", "--bom", csv_bom_path, "--form", str(form_path), "-o", str(tmp_path)])
     assert code == EXIT_BLOCKED

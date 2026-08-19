@@ -119,10 +119,13 @@ def build_offer(
     pricing_overrides: Optional[Dict[str, Any]] = None,
     use_ai: bool = False,
     force: bool = False,
-    make_pdf: bool = True,
+    make_pdf: bool = False,
     approve: Optional[Callable[[BuildResult], bool]] = None,
 ) -> BuildResult:
     """Esegue l'intero flusso e scrive gli output nella cartella indicata.
+
+    Il deliverable e' il DOCX: resta modificabile a mano prima dell'invio. Il
+    PDF si genera solo con ``make_pdf=True``, e comunque solo a QA superato.
 
     ``force=True`` prosegue anche in presenza di anomalie bloccanti (import,
     form o QA), registrandole comunque negli output.
@@ -194,7 +197,7 @@ def build_offer(
     )
     result.outputs["report"] = report_path
 
-    # 8. PDF: solo dopo QA superato (o forzatura esplicita) ------------------
+    # 8. PDF (opzionale): solo dopo QA superato o forzatura esplicita --------
     if make_pdf:
         if not qa_report.passed and not force:
             result.issues.append(

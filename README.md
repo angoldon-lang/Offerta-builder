@@ -50,7 +50,9 @@ invece di stimare.
 pip install -e .            # oppure: pip install -r requirements.txt
 ```
 
-Per l'export PDF serve LibreOffice **con il modulo Writer**:
+Il deliverable normale e' il **DOCX**, cosi' resta modificabile a mano prima
+dell'invio. Il PDF e' opzionale (`--pdf`) e richiede LibreOffice **con il modulo
+Writer**:
 
 ```bash
 sudo apt-get install libreoffice-writer     # Debian/Ubuntu
@@ -68,12 +70,15 @@ python -m offerta_builder.cli form-init -o form_offerta.json --bom examples/bom_
 # 2. controlla come viene letta la BOM (sola lettura)
 python -m offerta_builder.cli bom examples/bom_vvalley_solarwinds.csv
 
-# 3. genera l'offerta completa
+# 3. genera l'offerta (esce il DOCX, da rileggere e ritoccare)
 python -m offerta_builder.cli build \
     --bom examples/bom_vvalley_solarwinds.csv \
     --form examples/form_offerta.json \
     --template templates/offerta_ad_template.docx \
     --out out
+
+# 4. solo a offerta chiusa, se serve anche il PDF
+python -m offerta_builder.cli build ... --pdf
 
 # variante guidata: chiede a video i campi mancanti e l'approvazione prima del PDF
 python -m offerta_builder.cli build --bom <file> --interattivo --template <template> --out out
@@ -82,7 +87,7 @@ python -m offerta_builder.cli build --bom <file> --interattivo --template <templ
 Dopo `pip install -e .` gli stessi comandi sono disponibili come `offerta ...`.
 
 Opzioni utili di `build`: `--modo {markup,target_margin,manual}`, `--markup 35`,
-`--margine 30`, `--arrotondamento {none,0.01,1,10,100}`, `--no-pdf`, `--ai`,
+`--margine 30`, `--arrotondamento {none,0.01,1,10,100}`, `--pdf`, `--ai`,
 `--force`, `--json`.
 
 Codici di uscita: `0` tutto ok, `2` flusso bloccato prima della generazione,
@@ -92,8 +97,8 @@ Codici di uscita: `0` tutto ok, `2` flusso bloccato prima della generazione,
 
 | File | Contenuto |
 | ---- | --------- |
-| `offerta.docx` | offerta compilata sul template AD |
-| `offerta.pdf` | versione pronta da inviare (solo a QA superato) |
+| `offerta.docx` | offerta compilata sul template AD: e' il deliverable, si ritocca a mano |
+| `offerta.pdf` | solo con `--pdf`, e solo a QA superato |
 | `bom_normalizzata.json` | BOM nello schema unico, con le anomalie di import |
 | `dati_offerta.json` | righe, totali, annualita': la fonte numerica del documento |
 | `controlli_qa.json` | esito di ogni controllo, con dettagli |
@@ -179,8 +184,9 @@ Prima dell'export PDF vengono verificati:
 - condizioni di pagamento, fatturazione e campi obbligatori compilati;
 - totale calcolato effettivamente presente nel documento generato.
 
-Un solo esito `fail` blocca il PDF; gli avvisi passano ma restano scritti in
-`controlli_qa.json` e nel riepilogo interno.
+Il DOCX viene sempre prodotto, anche a QA rosso: serve proprio a vedere e
+correggere il problema. Un esito `fail` blocca invece la conversione in PDF; gli
+avvisi passano ma restano scritti in `controlli_qa.json` e nel riepilogo interno.
 
 ## Template
 
