@@ -6,6 +6,7 @@ Sia il lettore (per capire quale riga e' l'intestazione) sia il normalizzatore
 
 from __future__ import annotations
 
+import re
 from typing import Dict, List, Tuple
 
 from .base import normalize_header
@@ -31,6 +32,7 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
         "listino unitario", "prezzo listino", "prezzo di listino", "prezzo listino unitario",
         "list price", "unit list price", "list unit price", "msrp", "srp",
         "prezzo unitario listino", "listino", "list", "unit price list",
+        "listino esp", "listino espositore",
     ],
     "list_price_total": [
         "totale listino", "listino totale", "list total", "extended list",
@@ -40,8 +42,12 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
     "discount_percent": [
         "sconto", "sconto %", "sconto perc", "sconto percentuale", "discount",
         "discount %", "disc", "disc %", "discount percent", "percentuale sconto",
-        "% sconto", "% discount",
+        "% sconto", "% discount", "sc", "sc 1", "sconto 1",
     ],
+    # Sconti a cascata: alcuni distributori (Computer Gross) espongono
+    # "Sc 1 / Sc 2 / Sc 3" e il netto risulta dalla loro composizione.
+    "discount_percent_2": ["sc 2", "sconto 2", "discount 2", "secondo sconto"],
+    "discount_percent_3": ["sc 3", "sconto 3", "discount 3", "terzo sconto"],
     "cost_net_unit": [
         "netto unitario", "prezzo netto unitario", "prezzo netto", "net price",
         "net unit price", "unit net price", "unit net", "costo unitario",
@@ -52,7 +58,7 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
         "totale netto", "netto totale", "net total", "extended net",
         "extended net price", "total net price", "importo netto", "costo totale",
         "totale acquisto", "total cost", "net amount", "importo", "totale",
-        "total", "amount",
+        "total", "amount", "prezzo totale", "totale riga",
     ],
     "period": [
         "periodo", "period", "durata", "term", "coverage", "coverage term",
@@ -76,6 +82,11 @@ for _canonical, _aliases in COLUMN_ALIASES.items():
 # Alias che, da soli, non bastano a dire "questa e' la riga di intestazione".
 _WEAK = {"totale", "total", "importo", "amount", "listino", "list", "num", "type", "tipo"}
 
+# Intestazioni di sconto scritte in modo compatto ("Sc", "Sc 1", "Sc 2 Sc 3"):
+# non si distinguono per nome, si assegnano in ordine di comparsa.
+_DISCOUNT_HEADER_RE = re.compile(r"^(?:sc|sconto|disc|discount)\b[\s0-9%]*$")
+_DISCOUNT_SLOTS = ["discount_percent", "discount_percent_2", "discount_percent_3"]
+
 # Campi che rendono credibile un'intestazione di BOM.
 _STRONG_FIELDS = {"sku", "description", "quantity", "list_price_unit",
                   "cost_net_unit", "cost_net_total", "discount_percent"}
@@ -94,6 +105,14 @@ def map_header(cells: List[str]) -> Tuple[Dict[int, str], int]:
     for idx, cell in enumerate(cells):
         key = normalize_header(cell)
         if not key:
+            continue
+        if _DISCOUNT_HEADER_RE.match(key):
+            slot = next((s for s in _DISCOUNT_SLOTS if s not in used), None)
+            if slot is None:
+                continue
+            mapping[idx] = slot
+            used.add(slot)
+            score += 3 if slot == "discount_percent" else 1
             continue
         canonical = _LOOKUP.get(key)
         if canonical is None:
@@ -117,6 +136,8 @@ def map_header(cells: List[str]) -> Tuple[Dict[int, str], int]:
             score += 3
         else:
             score += 2
-    if not _STRONG_FIELDS & used:
+    # Una singola colonna riconosciuta non fa un'intestazione: serve almeno una
+    # coppia, di cui una colonna "forte" (codice, descrizione, quantità, prezzo).
+    if not _STRONG_FIELDS & used or len(used) < 2:
         score = 0
     return mapping, score

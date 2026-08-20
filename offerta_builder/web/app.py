@@ -25,7 +25,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 
 from ..bom import normalize
 from ..bom.reader import SUPPORTED_EXTENSIONS
-from ..form import FIELDS, blank_form
+from ..form import FIELDS, blank_form, prefill_from_bom
 from ..models import NormalizedBom
 from ..money import format_eur, format_number, format_percent
 from ..pipeline import BlockingError, build_offer, prepare_offer
@@ -358,6 +358,11 @@ def _bom_payload(bom: NormalizedBom) -> Dict[str, Any]:
         "validita": bom.valid_until,
         "formato": bom.source_format,
         "file": os.path.basename(bom.source_file),
+        "special_bid": bom.meta.get("special_bid", ""),
+        "periodo_contratto": bom.meta.get("periodo_contratto", ""),
+        # Condizioni fra distributore e rivenditore: informative, non vengono
+        # mai copiate nelle condizioni verso il cliente.
+        "pagamento_distributore": bom.meta.get("payment_terms", ""),
         "righe": len(bom.items),
         "costo": format_eur(bom.total_cost()),
         "listino": format_eur(bom.total_list()),
@@ -379,17 +384,8 @@ def _bom_payload(bom: NormalizedBom) -> Dict[str, Any]:
 
 
 def _prefill(boms: Sequence[NormalizedBom]) -> Dict[str, str]:
-    prefill: Dict[str, str] = {}
-    for bom in boms:
-        if bom.end_user and "cliente" not in prefill:
-            prefill["cliente"] = bom.end_user.replace("_", " ").strip()
-        if bom.vendor and "oggetto" not in prefill:
-            prefill["oggetto"] = f"Fornitura soluzione {bom.vendor}"
-        if bom.valid_until and "validita_offerta" not in prefill:
-            from ..dates import to_it
-
-            prefill["validita_offerta"] = to_it(bom.valid_until)
-    return prefill
+    """Campi proposti dalla BOM: stessa logica del flusso da riga di comando."""
+    return {chiave: valore for chiave, valore in prefill_from_bom({}, boms).items() if valore}
 
 
 def _totals_payload(offer) -> Dict[str, Any]:

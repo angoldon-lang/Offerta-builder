@@ -55,15 +55,25 @@ def is_empty_row(row: List[str]) -> bool:
 
 META_PATTERNS = {
     "quote_number": [
+        r"(?:preventivo|offerta|quotation|quote)\s*(?:numero|number|no\.?|n\.?|#|id)\s*[:#]?\s*([A-Za-z0-9._/-]+)",
         r"(?:quote|offerta|preventivo|quotation)\s*(?:number|no\.?|n\.?|#|id)?\s*[:#]\s*([A-Za-z0-9._/-]+)",
         r"\b(Q-\d{4,})\b",
     ],
+    "special_bid": [
+        r"special\s*bid\s*[:#]?\s*([A-Za-z0-9._/-]+)",
+    ],
     "end_user": [
-        r"(?:end\s*user|end-user|cliente finale|utente finale|customer)\s*[:]\s*(.+)",
+        # Alcuni PDF incollano etichetta e valore ("Utente finaleAcme S.r.l.").
+        r"(?:end\s*user|end-user|cliente finale|utente finale|customer)\s*[:]?\s*(.+)",
     ],
     "valid_until": [
-        r"(?:valid(?:ity|o|a)?\s*(?:until|to|fino al|fino a)|scadenza|validit\w*)\s*[:]?\s*"
-        r"([0-9]{1,2}[\s./-][A-Za-z0-9]{2,9}[\s./-][0-9]{2,4})",
+        # "Validita' dell'offerta: ordini evasi e fatturati entro il 30-settembre-2026"
+        r"validit\w*[^\n]{0,80}?([0-9]{1,2}[\s./-][A-Za-z0-9]{2,12}[\s./-][0-9]{2,4})",
+        r"(?:valid(?:ity|o|a)?\s*(?:until|to|fino al|fino a)|scadenza)\s*[:]?\s*"
+        r"([0-9]{1,2}[\s./-][A-Za-z0-9]{2,12}[\s./-][0-9]{2,4})",
+    ],
+    "payment_terms": [
+        r"(?:modalit\w*\s*di\s*pagamento|condizioni\s*di\s*pagamento|payment\s*terms)\s*[:]?\s*(.+)",
     ],
     "distributor": [
         r"\b(V-?Valley|Computer\s*Gross|Esprinet|Ingram\s*Micro|TD\s*SYNNEX|Also|Attiva|Icos)\b",

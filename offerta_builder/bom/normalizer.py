@@ -9,6 +9,7 @@ che resta ambiguo diventa una ``Issue`` e ferma il flusso.
 from __future__ import annotations
 
 import os
+import re
 from decimal import Decimal
 from typing import Dict, List, Optional
 
@@ -34,6 +35,16 @@ _TOTAL_ROW_HINTS = {
     "totale", "totale generale", "total", "grand total", "subtotal", "subtotale",
     "totale offerta", "totale complessivo", "sum",
 }
+
+_NUMERIC_FIELDS = (
+    "quantity", "list_price_unit", "list_price_total", "discount_percent",
+    "discount_percent_2", "discount_percent_3", "cost_net_unit", "cost_net_total",
+)
+
+# Etichette che descrivono la copertura temporale invece del raggruppamento.
+_PERIOD_LABEL_RE = re.compile(
+    r"(decorrenza|periodo|copertura|dal\s+\d|from\s+\d|coverage)", re.IGNORECASE
+)
 
 
 def normalize(
@@ -97,12 +108,27 @@ def normalize(
         )
 
     line_no = 0
+    gruppo_corrente = ""
+    periodo_globale = ""
     for record in records:
         if _looks_like_total_row(record):
+            continue
+        etichetta = _label_row(record)
+        if etichetta:
+            # Righe come "Decorrenza dal 31-07-2026 al 30-07-2029" o
+            # "Prima fatturazione all'ordine": non sono articoli, sono il
+            # contesto delle righe che seguono.
+            if _PERIOD_LABEL_RE.search(etichetta):
+                periodo_globale = etichetta
+                bom.meta.setdefault("periodo_contratto", etichetta)
+            else:
+                gruppo_corrente = etichetta
             continue
         item = _build_item(record, bom, profile.cost_priority)
         if item is None:
             continue
+        if not item.period:
+            item.period = gruppo_corrente or periodo_globale
         line_no += 1
         item.line_no = line_no
         bom.items.append(item)
@@ -147,12 +173,26 @@ def _missing_columns(header: List[str]) -> List[str]:
 
 
 def _looks_like_total_row(record: Dict[str, str]) -> bool:
-    description = clean_cell(record.get("description", "")).lower()
-    sku = clean_cell(record.get("sku", ""))
-    if description in _TOTAL_ROW_HINTS and not sku:
-        return True
-    joined = " ".join(clean_cell(v).lower() for k, v in record.items() if k in {"sku", "description", "category"})
-    return joined.strip() in _TOTAL_ROW_HINTS
+    """Righe di totale/subtotale: hanno importi ma non identificano un articolo."""
+    if clean_cell(record.get("sku", "")):
+        return False
+    testi = [clean_cell(valore).lower() for valore in record.values() if clean_cell(valore)]
+    if not testi:
+        return False
+    return any(
+        testo in _TOTAL_ROW_HINTS or testo.startswith(("totale ", "total ", "subtotale ", "subtotal "))
+        for testo in testi
+    )
+
+
+def _label_row(record: Dict[str, str]) -> str:
+    """Riga di sola etichetta (gruppo, periodo, sezione): testo senza numeri."""
+    if any(parse_decimal(record.get(campo)) is not None for campo in _NUMERIC_FIELDS):
+        return ""
+    testo = " ".join(
+        clean_cell(record.get(campo, "")) for campo in ("sku", "description", "category", "period")
+    ).strip()
+    return testo if len(testo) > 3 else ""
 
 
 def _build_item(record: Dict[str, str], bom: NormalizedBom, cost_priority: str) -> Optional[BomItem]:
@@ -197,12 +237,33 @@ def _build_item(record: Dict[str, str], bom: NormalizedBom, cost_priority: str) 
 
     item.list_price_unit = parse_decimal(record.get("list_price_unit"))
     item.list_price_total = parse_decimal(record.get("list_price_total"))
-    item.discount_percent = parse_decimal(record.get("discount_percent"))
+    item.discount_percent = _compose_discounts(record)
     item.cost_net_unit = parse_decimal(record.get("cost_net_unit"))
     item.cost_net_total = parse_decimal(record.get("cost_net_total"))
 
     _derive_amounts(item, bom, cost_priority)
     return item
+
+
+def _compose_discounts(record: Dict[str, str]) -> Optional[Decimal]:
+    """Compone gli sconti a cascata (Sc 1 / Sc 2 / Sc 3) in un unico sconto.
+
+    Con 40% + 10% lo sconto complessivo non e' 50% ma 46%: si applicano uno
+    dopo l'altro sul residuo.
+    """
+    valori = [
+        parse_decimal(record.get(campo))
+        for campo in ("discount_percent", "discount_percent_2", "discount_percent_3")
+    ]
+    valori = [valore for valore in valori if valore is not None]
+    if not valori:
+        return None
+    if len(valori) == 1:
+        return valori[0]
+    residuo = Decimal("1")
+    for valore in valori:
+        residuo *= (Decimal("100") - valore) / Decimal("100")
+    return q4((Decimal("1") - residuo) * Decimal("100"))
 
 
 def _derive_amounts(item: BomItem, bom: NormalizedBom, cost_priority: str) -> None:

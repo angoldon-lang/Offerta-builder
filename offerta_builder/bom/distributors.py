@@ -40,6 +40,9 @@ VENDOR_HINTS = [
     "HPE", "Lenovo", "NetApp", "Citrix", "Nutanix", "Sophos", "Palo Alto",
     "Check Point", "Acronis", "Trend Micro", "Red Hat", "Commvault", "Rubrik",
     "Zerto", "Aruba", "Juniper", "Barracuda", "WatchGuard", "Kaspersky",
+    "Arcserve", "Datto", "N-able", "Bitdefender", "ESET", "Ivanti", "SentinelOne",
+    "Synology", "QNAP", "Wasabi", "Proofpoint", "Qualys", "Tenable", "Splunk",
+    "Zscaler", "Crowdstrike", "Hornetsecurity", "Vertiv", "APC", "Eaton",
 ]
 
 
@@ -55,14 +58,23 @@ def detect_distributor(*texts: str) -> Optional[DistributorProfile]:
 
 
 def detect_vendor(*texts: str) -> str:
+    """Riconosce il vendor citato nel documento.
+
+    Il confronto e' su parola intera: senza, "Dell" verrebbe trovato dentro
+    "dell'offerta" in qualunque quotazione italiana.
+    """
     haystack = " ".join(t for t in texts if t)
     if not haystack:
         return ""
-    lowered = haystack.lower()
+    conteggi = []
     for vendor in VENDOR_HINTS:
-        if vendor.lower() in lowered:
-            return vendor
-    return ""
+        pattern = r"(?<![\w'])" + re.escape(vendor) + r"(?![\w'])"
+        occorrenze = len(re.findall(pattern, haystack, re.IGNORECASE))
+        if occorrenze:
+            conteggi.append((occorrenze, -VENDOR_HINTS.index(vendor), vendor))
+    if not conteggi:
+        return ""
+    return max(conteggi)[2]
 
 
 def profile_for(name: str) -> DistributorProfile:

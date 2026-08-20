@@ -106,7 +106,8 @@ def _read_xlsx(path: str) -> List[RawTable]:
     return tables
 
 
-_PDF_META_STOP = re.compile(r"^\s*$")
+# Distanza massima, in punti, entro cui cercare l'intestazione sopra la tabella.
+HEADER_SEARCH_HEIGHT = 45
 
 
 def _read_pdf(path: str) -> List[RawTable]:
@@ -118,10 +119,16 @@ def _read_pdf(path: str) -> List[RawTable]:
         for page in pdf.pages:
             page_text = page.extract_text() or ""
             text_chunks.append(page_text)
-            for raw in page.extract_tables():
-                matrix = [[clean_cell(cell) for cell in row] for row in raw if row]
+            for trovata in page.find_tables():
+                matrix = [[clean_cell(cell) for cell in row] for row in trovata.extract() if row]
                 if len(matrix) < 2:
                     continue
+                # Molte quotazioni (Computer Gross, Esprinet...) disegnano il
+                # riquadro solo attorno alle righe articolo: l'intestazione resta
+                # testo libero appena sopra. La recuperiamo dalle coordinate.
+                intestazione = _header_above_table(page, trovata)
+                if intestazione:
+                    matrix.insert(0, intestazione)
                 tables.extend(_split_matrix(matrix, path, "pdf"))
     full_text = "\n".join(text_chunks)
 
@@ -132,6 +139,67 @@ def _read_pdf(path: str) -> List[RawTable]:
         # La testata del PDF (numero quote, end user, validità) sta nel testo.
         table.meta_text = (table.meta_text + "\n" + full_text).strip()
     return tables
+
+
+def _column_ranges(table) -> List[Tuple[float, float]]:
+    """Estremi orizzontali di ogni colonna della tabella."""
+    ranges: List[Tuple[float, float]] = []
+    for colonna in getattr(table, "columns", []) or []:
+        bbox = getattr(colonna, "bbox", None)
+        if not bbox:
+            return []
+        ranges.append((float(bbox[0]), float(bbox[2])))
+    return ranges
+
+
+def _header_above_table(page, table) -> List[str]:
+    """Cerca la riga di intestazione appena sopra il riquadro della tabella.
+
+    Assegna ogni parola alla colonna che la contiene e restituisce le celle
+    ricostruite, oppure una lista vuota se sopra la tabella non c'e' nulla che
+    somigli a un'intestazione.
+    """
+    ranges = _column_ranges(table)
+    if not ranges:
+        return []
+    top = float(table.bbox[1])
+    try:
+        parole = page.extract_words()
+    except Exception:  # pragma: no cover - PDF con testo non estraibile
+        return []
+
+    righe: Dict[float, List[dict]] = {}
+    for parola in parole:
+        base = float(parola.get("bottom", 0))
+        if top - HEADER_SEARCH_HEIGHT <= base <= top + 2:
+            righe.setdefault(round(base, 1), []).append(parola)
+
+    migliore: Tuple[List[str], int] = ([], 0)
+    for chiave in sorted(righe, reverse=True)[:4]:  # dalla piu' vicina alla tabella
+        celle = _words_to_columns(righe[chiave], ranges)
+        _, punteggio = map_header(celle)
+        if punteggio > migliore[1]:
+            migliore = (celle, punteggio)
+    return migliore[0] if migliore[1] > 0 else []
+
+
+def _words_to_columns(parole: List[dict], ranges: List[Tuple[float, float]]) -> List[str]:
+    """Distribuisce le parole di una riga nelle colonne della tabella."""
+    celle: List[List[str]] = [[] for _ in ranges]
+    for parola in sorted(parole, key=lambda p: float(p.get("x0", 0))):
+        centro = (float(parola.get("x0", 0)) + float(parola.get("x1", 0))) / 2
+        candidati = [
+            (destra - sinistra, indice)
+            for indice, (sinistra, destra) in enumerate(ranges)
+            if sinistra <= centro <= destra
+        ]
+        if not candidati:
+            continue
+        # Le celle unite producono colonne che ne inglobano altre: vince la piu'
+        # stretta, cioe' quella davvero corrispondente alla parola.
+        _, indice = min(candidati)
+        celle[indice].append(str(parola.get("text", "")))
+    return [clean_cell(" ".join(cella)) for cella in celle]
 
 
 def _tables_from_text(text: str, path: str) -> List[RawTable]:

@@ -158,9 +158,23 @@ I campi `sell_*` e `vat_*` sono valorizzati **solo** dal motore commerciale: nel
 file del distributore ci sono costi, non prezzi al cliente.
 
 Colonne riconosciute automaticamente (IT/EN): codice/SKU/part number, descrizione,
-quantità, prezzo di listino, totale listino, sconto %, netto unitario, totale
-netto, periodo, categoria, valuta, vendor, note. Le colonne non riconosciute
-vengono elencate come avviso.
+quantità, prezzo di listino, totale listino, sconto % (anche a cascata: `Sc 1`,
+`Sc 2`, `Sc 3`), netto unitario, totale netto, periodo, categoria, valuta,
+vendor, note. Le colonne non riconosciute vengono elencate come avviso.
+
+Sui PDF l'importatore gestisce anche i casi tipici delle quotazioni italiane:
+
+- **intestazione fuori dal riquadro**: molte quotazioni (Computer Gross,
+  Esprinet) disegnano il bordo solo attorno alle righe articolo e lasciano
+  `Codice | Descrizione | Q.tà | ...` come testo sopra. L'intestazione viene
+  recuperata dalle coordinate e riallineata alle colonne;
+- **righe di raggruppamento** (`Prima fatturazione all'ordine`, `Decorrenza dal
+  ... al ...`): non sono articoli, diventano il periodo delle righe che seguono
+  e alimentano il riepilogo per annualità;
+- **totali intermedi** (`Totale Gruppo 1`): esclusi dal conteggio;
+- **sconti a cascata**: `30% + 10%` diventa `37%`, non `40%`;
+- **testata senza due punti** (`Utente finaleAcme S.r.l.`) e validità scritta a
+  parole (`Ordini evasi e fatturati entro il 30-settembre-2026`).
 
 ## Regole del motore commerciale
 

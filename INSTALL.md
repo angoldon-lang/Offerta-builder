@@ -223,10 +223,35 @@ contiene numeri non presenti nei dati calcolati, viene scartato in automatico.
 
 ## 7. Aggiornare all'ultima versione
 
+Se l'interfaccia web è aperta, fermala prima con **Ctrl+C** nel terminale. Poi,
+dalla cartella del progetto con l'ambiente attivo:
+
 ```bash
-cd <cartella del progetto>
 git pull
-pip install -e .        # solo se sono cambiate le dipendenze
+pip install -e .        # riallinea le dipendenze, è veloce se non è cambiato nulla
+python -m pytest        # controllo facoltativo: devono passare tutti
+offerta web             # riavvia l'interfaccia
+```
+
+Su Windows, con PowerShell:
+
+```powershell
+cd $HOME\Documents\Offerta-builder
+.\.venv\Scripts\Activate.ps1
+git pull
+pip install -e .
+offerta web
+```
+
+Dopo l'aggiornamento **ricarica la pagina nel browser** (Ctrl+F5): il file
+JavaScript viene messo in cache, e senza ricarica forzata continueresti a usare
+la versione precedente dell'interfaccia.
+
+Se `git pull` si lamenta di modifiche locali che non ricordi di aver fatto:
+
+```bash
+git status              # mostra cosa è cambiato
+git checkout -- .       # scarta le modifiche locali e riprova il pull
 ```
 
 ---
@@ -240,7 +265,7 @@ pip install pytest
 python -m pytest
 ```
 
-Attesi: **112 test verdi**.
+Attesi: **118 test verdi**.
 
 ---
 

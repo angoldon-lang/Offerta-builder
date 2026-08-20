@@ -141,13 +141,19 @@ def _has_value(value: Any) -> bool:
 
 
 def prefill_from_bom(data: Dict[str, Any], boms: Sequence[Any]) -> Dict[str, Any]:
-    """Propone i dati deducibili dalla BOM senza sovrascrivere quelli inseriti."""
+    """Propone i dati deducibili dalla BOM senza sovrascrivere quelli inseriti.
+
+    Restano fuori le condizioni commerciali: quelle del distributore valgono fra
+    distributore e rivenditore, non fra rivenditore e cliente finale.
+    """
     data = dict(data)
     for bom in boms:
         if not _has_value(data.get("cliente")) and getattr(bom, "end_user", ""):
             data["cliente"] = str(bom.end_user).replace("_", " ").strip()
         if not _has_value(data.get("oggetto")) and getattr(bom, "vendor", ""):
             data["oggetto"] = f"Fornitura soluzione {bom.vendor}"
+        if not _has_value(data.get("validita_offerta")) and getattr(bom, "valid_until", ""):
+            data["validita_offerta"] = to_it(bom.valid_until)
     return data
 
 
