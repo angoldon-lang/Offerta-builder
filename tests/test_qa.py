@@ -85,10 +85,12 @@ def test_iva_incoerente(offerta, form_data):
     assert check(report, "qa.iva").level == LEVEL_FAIL
 
 
-def test_margine_sotto_soglia(offerta, form_data):
+def test_margine_sotto_soglia_avvisa_ma_non_blocca(offerta, form_data):
+    """Un margine basso è una decisione commerciale, non un errore di dati."""
     form_data["margine_minimo_percento"] = 60
     report = run_qa(offerta, form_data, document_text=documento(offerta))
-    assert check(report, "qa.margine").level == LEVEL_FAIL
+    assert check(report, "qa.margine").level == LEVEL_WARN
+    assert report.passed
 
 
 def test_condizioni_di_pagamento_incomplete(offerta, form_data):

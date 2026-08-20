@@ -74,10 +74,18 @@ offerta web            # apre il browser su http://127.0.0.1:8000
 ```
 
 Tutto in una pagina: trascini le BOM e il template, compili i dati, scegli
-markup o margine obiettivo e vedi **subito** l'anteprima dei prezzi calcolata dal
-backend. Il prezzo unitario è modificabile riga per riga (diventa una deroga
-manuale), i totali e il margine restano aggiornati nel riepilogo laterale, e al
-termine trovi l'esito dei controlli QA con i file da scaricare.
+margine obiettivo o markup e vedi **subito** l'anteprima dei prezzi calcolata dal
+backend. Le condizioni di vendita si scelgono da tendine con i valori più usati
+(con "Altro" per scriverne uno diverso), i totali e il margine restano aggiornati
+nel riepilogo laterale, e al termine trovi l'esito dei controlli QA con i file da
+scaricare.
+
+Le **righe dell'offerta sono modificabili una per una**: codice, descrizione,
+quantità e prezzo. Il prezzo mostrato è già quello al cliente, calcolato dal
+costo della BOM con il margine impostato; riscriverlo lo fissa a mano solo su
+quella riga. Cambiando la quantità il costo di acquisto si aggiorna di
+conseguenza. Una riga si può togliere dall'offerta con "togli" e rimettere con
+"rimetti", e "Azzera le modifiche di riga" riporta tutto ai valori della BOM.
 
 Il server ascolta solo su `127.0.0.1`: i dati non escono dal computer. Opzioni:
 `--porta`, `--host`, `--no-browser`.
@@ -188,6 +196,9 @@ Sui PDF l'importatore gestisce anche i casi tipici delle quotazioni italiane:
 4. I calcoli usano `Decimal` con arrotondamento half-up a due decimali.
 5. Se un dato manca o è incoerente, il flusso si ferma: si prosegue solo con
    `--force`, e l'anomalia resta scritta negli output.
+6. Il margine sotto la soglia minima **non blocca**: viene segnalato nel QA e nel
+   riepilogo interno, ma accettarlo è una decisione commerciale, non un errore di
+   dati.
 
 ### Deroghe di riga
 
@@ -215,7 +226,7 @@ Prima dell'export PDF vengono verificati:
 - titoli incollati (`PremessaPremessa`) o sezioni ripetute;
 - somma delle righe uguale al totale offerta, e riepilogo annuale coerente;
 - IVA ricalcolata riga per riga;
-- margine totale e di riga sopra la soglia minima;
+- margine totale e di riga rispetto alla soglia minima (avviso, non blocco);
 - condizioni di pagamento, fatturazione e campi obbligatori compilati;
 - totale calcolato effettivamente presente nel documento generato.
 

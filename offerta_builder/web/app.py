@@ -131,6 +131,7 @@ def create_app(work_root: Optional[str] = None) -> Flask:
                         "obbligatorio": spec.required,
                         "esempio": spec.example,
                         "scelte": list(spec.choices),
+                        "suggerimenti": list(spec.suggestions),
                         "aiuto": spec.help,
                         "default": str(spec.default) if spec.default is not None else "",
                     }
@@ -224,7 +225,7 @@ def create_app(work_root: Optional[str] = None) -> Flask:
             {
                 "stato": "ok",
                 "totali": _totals_payload(prepared.offer),
-                "righe": [_line_payload(i, index) for index, i in enumerate(prepared.offer.items)],
+                "righe": _lines_payload(prepared.offer),
                 "annualita": [
                     {
                         "periodo": a.label,
@@ -404,15 +405,31 @@ def _totals_payload(offer) -> Dict[str, Any]:
     }
 
 
-def _line_payload(item, index: int) -> Dict[str, Any]:
+def _lines_payload(offer) -> List[Dict[str, Any]]:
+    """Righe dell'offerta, comprese quelle escluse a mano (per poterle ripristinare)."""
+    righe = [_line_payload(item) for item in offer.items]
+    righe.extend(_line_payload(item, esclusa=True) for item in offer.excluded)
+    righe.sort(key=lambda riga: riga["indice"])
+    for posizione, riga in enumerate(r for r in righe if not r["esclusa"]):
+        riga["numero"] = posizione + 1
+    return righe
+
+
+def _line_payload(item, esclusa: bool = False) -> Dict[str, Any]:
     return {
-        "indice": index,
+        "indice": item.source_index,
+        "riferimento": item.source_reference,
+        "esclusa": esclusa,
+        "modificata": item.edited,
+        "numero": 0,
         "sku": item.sku,
         "descrizione": item.description,
         "categoria": item.category,
         "periodo": item.period,
         "quantita": format_number(item.quantity),
+        "quantita_valore": str(item.quantity),
         "costo": format_eur(item.cost_net_total),
+        "costo_unitario": format_eur(item.cost_net_unit),
         "prezzo_unitario": format_eur(item.sell_net_unit),
         "prezzo_unitario_valore": float(item.sell_net_unit or Decimal("0")),
         "totale": format_eur(item.sell_net_total),

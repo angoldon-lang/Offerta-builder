@@ -25,7 +25,7 @@ from .models import (
 )
 from .money import parse_decimal
 from .pdf import PdfConversionError, docx_to_pdf
-from .pricing import LineOverride, PricingPolicy, price_offer
+from .pricing import LineEdit, LineOverride, PricingPolicy, price_offer
 from .qa import QaReport, run_qa
 from .report import build_internal_report
 
@@ -95,8 +95,35 @@ def policy_from_form(form: Dict[str, Any], overrides: Optional[Dict[str, Any]] =
                 vat_percent=parse_decimal(raw.get("vat_percent")),
             )
         )
+    policy.line_edits = _line_edits_from_form(form)
     policy.services = _services_from_form(form)
     return policy
+
+
+def _line_edits_from_form(form: Dict[str, Any]) -> List[LineEdit]:
+    """Correzioni fatte riga per riga nell'interfaccia."""
+    modifiche: List[LineEdit] = []
+    for raw in form.get("righe") or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            indice = int(raw.get("indice", -1))
+        except (TypeError, ValueError):
+            continue
+        if indice < 0:
+            continue
+        modifiche.append(
+            LineEdit(
+                index=indice,
+                reference=str(raw.get("riferimento", "")),
+                sku=str(raw.get("sku", "")).strip(),
+                description=str(raw.get("descrizione", "")).strip(),
+                quantity=parse_decimal(raw.get("quantita")),
+                sell_net_unit=parse_decimal(raw.get("prezzo_unitario")),
+                exclude=bool(raw.get("escludi")),
+            )
+        )
+    return modifiche
 
 
 def _services_from_form(form: Dict[str, Any]) -> List[ServiceLine]:

@@ -185,6 +185,7 @@ input.invalid { border-color: var(--bad); background: var(--bad-soft); }
 /* --------------------------------------------------------------- tabelle */
 .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
 table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+#tabella-righe th, #tabella-righe td { padding: .35rem .4rem; }
 th, td { padding: .42rem .6rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
 thead th {
   background: var(--surface-2); color: var(--muted);
@@ -193,8 +194,22 @@ thead th {
 tbody tr:last-child td { border-bottom: 0; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 tr.sotto-soglia td { background: var(--bad-soft); }
-td input.prezzo { width: 108px; text-align: right; font-variant-numeric: tabular-nums; }
-td .manuale { font-size: .68rem; color: var(--accent); display: block; }
+tr.riga-esclusa td { opacity: .5; text-decoration: line-through; }
+tr.riga-esclusa td.azioni { opacity: 1; text-decoration: none; }
+td input.cella {
+  width: 100%; min-width: 70px; padding: .22rem .35rem; font-size: .84rem;
+  border: 1px solid transparent; background: transparent; border-radius: 5px;
+}
+td input.cella:hover { border-color: var(--line); }
+td input.cella:focus { border-color: var(--accent); background: var(--surface); }
+td input.cella[data-dirty="1"] { border-color: var(--accent); background: var(--accent-soft); }
+td input.c-sku { min-width: 88px; }
+td input.c-desc { min-width: 180px; }
+td input.c-qta { width: 60px; min-width: 0; text-align: right; }
+td input.prezzo { width: 110px; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
+td .manuale { font-size: .68rem; color: var(--accent); display: block; text-align: right; }
+td.azioni { white-space: nowrap; }
+td.azioni button + button { margin-left: .5rem; }
 .vuoto { padding: .9rem; color: var(--muted); font-size: .85rem; text-align: center; }
 
 /* -------------------------------------------------------------- riepilogo */

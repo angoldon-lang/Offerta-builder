@@ -11,7 +11,7 @@ possono combinare per riga:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Dict, List, Optional
 
@@ -59,6 +59,31 @@ class LineOverride:
 
 
 @dataclass
+class LineEdit:
+    """Modifica manuale su una riga dell'offerta, individuata per posizione.
+
+    Le righe si possono correggere una per una (descrizione, quantità, prezzo)
+    o togliere dall'offerta. Il riferimento serve da controllo: se la riga in
+    quella posizione non è più quella, la modifica viene ignorata invece di
+    finire sulla riga sbagliata.
+    """
+
+    index: int
+    reference: str = ""
+    sku: str = ""
+    description: str = ""
+    quantity: Optional[Decimal] = None
+    sell_net_unit: Optional[Decimal] = None
+    exclude: bool = False
+
+    def matches(self, item: BomItem) -> bool:
+        if not self.reference:
+            return True
+        atteso = self.reference.strip().lower()
+        return atteso in (item.sku or "").lower() or atteso in (item.description or "").lower()
+
+
+@dataclass
 class PricingPolicy:
     mode: str = MODE_MARKUP
     markup_percent: Decimal = Decimal("0")
@@ -68,7 +93,14 @@ class PricingPolicy:
     rounding: str = "0.01"
     contract_years: int = 1
     overrides: List[LineOverride] = field(default_factory=list)
+    line_edits: List[LineEdit] = field(default_factory=list)
     services: List[ServiceLine] = field(default_factory=list)
+
+    def edit_for(self, index: int, item: BomItem) -> Optional[LineEdit]:
+        for edit in self.line_edits:
+            if edit.index == index and edit.matches(item):
+                return edit
+        return None
 
     def override_for(self, item: BomItem) -> Optional[LineOverride]:
         for override in self.overrides:
@@ -107,13 +139,29 @@ def price_offer(
         )
         return result
 
+    indice = 0
     for bom in boms:
-        for item in bom.items:
-            priced = _price_line(item, policy, result)
-            result.items.append(priced)
+        for original in bom.items:
+            # Si lavora su una copia: le righe normalizzate restano quelle lette
+            # dal file, cosi' le modifiche manuali non si accumulano fra un
+            # ricalcolo e l'altro.
+            item = replace(original)
+            item.source_index = indice
+            item.source_reference = (original.sku or original.description or "")[:40]
+            edit = policy.edit_for(indice, item)
+            indice += 1
+            if edit is not None:
+                _apply_edit(item, edit)
+                if edit.exclude:
+                    result.excluded.append(item)
+                    continue
+            result.items.append(_price_line(item, policy, result, edit))
 
     for service in policy.services:
-        result.items.append(_price_service(service, policy, result))
+        servizio = _price_service(service, policy, result)
+        servizio.source_index = indice
+        indice += 1
+        result.items.append(servizio)
 
     result.totals = _totals(result.items)
     result.annual = _annual_breakdown(result.items, policy)
@@ -121,7 +169,28 @@ def price_offer(
     return result
 
 
-def _price_line(item: BomItem, policy: PricingPolicy, result: PricedOffer) -> BomItem:
+def _apply_edit(item: BomItem, edit: LineEdit) -> None:
+    """Riporta sulla riga le correzioni fatte a mano prima del calcolo."""
+    if edit.sku:
+        item.sku = edit.sku
+    if edit.description:
+        item.description = edit.description
+    if edit.quantity is not None and edit.quantity > 0 and edit.quantity != item.quantity:
+        item.quantity = edit.quantity
+        # Cambiando la quantità cambia anche il costo di acquisto della riga.
+        if item.cost_net_unit is not None:
+            item.cost_net_total = q2(item.cost_net_unit * edit.quantity)
+        if item.list_price_unit is not None:
+            item.list_price_total = q2(item.list_price_unit * edit.quantity)
+    item.edited = bool(edit.sku or edit.description or edit.quantity is not None or edit.sell_net_unit is not None)
+
+
+def _price_line(
+    item: BomItem,
+    policy: PricingPolicy,
+    result: PricedOffer,
+    edit: Optional[LineEdit] = None,
+) -> BomItem:
     override = policy.override_for(item)
     mode = (override.mode if override and override.mode else policy.mode)
     qty = item.quantity or Decimal("1")
@@ -131,7 +200,11 @@ def _price_line(item: BomItem, policy: PricingPolicy, result: PricedOffer) -> Bo
     )
 
     sell_unit: Optional[Decimal] = None
-    if override and override.sell_net_unit is not None:
+    if edit is not None and edit.sell_net_unit is not None:
+        # Il prezzo scritto a mano sulla riga vince su qualunque politica.
+        sell_unit = edit.sell_net_unit
+        mode = MODE_MANUAL
+    elif override and override.sell_net_unit is not None:
         sell_unit = override.sell_net_unit
         mode = MODE_MANUAL
     elif override and override.sell_net_total is not None and qty:
@@ -326,13 +399,15 @@ def _check_thresholds(result: PricedOffer, policy: PricingPolicy) -> None:
                 )
             )
     if result.totals.margin_percent < threshold:
+        # Sotto soglia si segnala, non si blocca: decidere se accettare quel
+        # margine e' una scelta commerciale, non un errore di dati.
         result.issues.append(
             Issue(
                 code="pricing.total_margin_below_threshold",
-                severity=SEVERITY_BLOCKING,
+                severity=SEVERITY_WARNING,
                 message=(
                     f"Margine totale offerta al {format_percent(result.totals.margin_percent)}, "
-                    f"sotto la soglia minima del {format_percent(threshold)}: serve approvazione esplicita."
+                    f"sotto la soglia minima del {format_percent(threshold)}: da valutare."
                 ),
                 details={"margine": result.totals.margin_percent, "soglia": threshold},
             )

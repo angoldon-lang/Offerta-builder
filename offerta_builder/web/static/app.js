@@ -11,6 +11,7 @@ const state = {
   schema: null,
   boms: [],
   overrides: {},
+  righe: {},
   preview: null,
   inflight: null,
 };
@@ -72,20 +73,38 @@ function specDi(nome) {
   return (state.schema.campi || []).find((campo) => campo.nome === nome);
 }
 
+const VALORE_ALTRO = '__altro__';
+
 function campoInput(spec) {
   const id = `campo-${spec.nome}`;
   const listaLunga = spec.tipo === 'list';
+  const proposte = (spec.scelte && spec.scelte.length) ? spec.scelte : (spec.suggerimenti || []);
   let controllo;
+  let libero = null;
 
   if (spec.nome === 'premessa') {
     controllo = el('textarea', { id, placeholder: 'Lascia vuoto per generarla dai dati dell\'offerta' });
   } else if (listaLunga) {
     controllo = el('textarea', { id, placeholder: 'Una voce per riga' });
-  } else if (spec.tipo === 'choice' && spec.scelte.length) {
-    controllo = el('select', { id }, spec.scelte.map((scelta) => el('option', { value: scelta, text: scelta })));
+  } else if (proposte.length) {
+    // Tendina con i valori piu' usati, piu' "Altro" per scriverne uno diverso.
+    controllo = el('select', { id },
+      el('option', { value: '', text: '- scegli -' }),
+      proposte.map((scelta) => el('option', { value: scelta, text: scelta })),
+      el('option', { value: VALORE_ALTRO, text: 'Altro (scrivi tu)...' }));
+    libero = el('input', {
+      type: 'text', placeholder: spec.esempio || 'Valore personalizzato', hidden: true,
+      oninput: pianificaAnteprima,
+    });
+    libero.dataset.campoLibero = spec.nome;
+    controllo.addEventListener('change', () => {
+      libero.hidden = controllo.value !== VALORE_ALTRO;
+      if (!libero.hidden) libero.focus();
+    });
   } else {
     controllo = el('input', { type: 'text', id, placeholder: spec.esempio || '' });
   }
+  if (spec.default && controllo.tagName !== 'SELECT' && !controllo.value) controllo.value = spec.default;
   controllo.dataset.campo = spec.nome;
   controllo.addEventListener('input', pianificaAnteprima);
   controllo.addEventListener('change', pianificaAnteprima);
@@ -96,8 +115,33 @@ function campoInput(spec) {
     { class: `campo${listaLunga || spec.nome === 'premessa' ? ' wide' : ''}` },
     etichetta,
     controllo,
+    libero,
     spec.aiuto ? el('span', { class: 'aiuto', text: spec.aiuto }) : null
   );
+}
+
+function valoreCampo(controllo) {
+  if (controllo.tagName === 'SELECT' && controllo.value === VALORE_ALTRO) {
+    const libero = controllo.parentElement.querySelector('[data-campo-libero]');
+    return libero ? libero.value.trim() : '';
+  }
+  return controllo.value.trim();
+}
+
+function impostaCampo(controllo, valore) {
+  if (controllo.tagName !== 'SELECT') {
+    controllo.value = valore;
+    return;
+  }
+  const opzioni = Array.from(controllo.options).map((o) => o.value);
+  const libero = controllo.parentElement.querySelector('[data-campo-libero]');
+  if (valore && !opzioni.includes(valore)) {
+    controllo.value = VALORE_ALTRO;
+    if (libero) { libero.value = valore; libero.hidden = false; }
+  } else {
+    controllo.value = valore;
+    if (libero) libero.hidden = controllo.value !== VALORE_ALTRO;
+  }
 }
 
 function costruisciForm() {
@@ -121,17 +165,21 @@ function costruisciControlliPrezzo() {
 
   const modalita = el('select', { id: 'pricing-mode', onchange: () => { aggiornaVisibilitaPrezzo(); pianificaAnteprima(); } },
     [
-      el('option', { value: 'markup', text: 'Markup sul costo' }),
-      el('option', { value: 'target_margin', text: 'Margine obiettivo' }),
+      el('option', { value: 'target_margin', text: 'Margine obiettivo (sul prezzo di vendita)' }),
+      el('option', { value: 'markup', text: 'Markup (ricarico sul costo)' }),
       el('option', { value: 'manual', text: 'Prezzo manuale per riga' }),
     ]);
   contenitore.appendChild(el('div', { class: 'campo' }, el('label', { for: 'pricing-mode', text: 'Modalità' }), modalita));
 
   const markup = el('input', { type: 'text', id: 'pricing-markup', value: '30', oninput: pianificaAnteprima });
-  contenitore.appendChild(el('div', { class: 'campo', id: 'box-markup' }, el('label', { for: 'pricing-markup', text: 'Markup %' }), markup));
+  contenitore.appendChild(el('div', { class: 'campo', id: 'box-markup' },
+    el('label', { for: 'pricing-markup', text: 'Markup % sul costo' }), markup,
+    el('span', { class: 'aiuto', text: 'costo x (1 + markup)' })));
 
   const margine = el('input', { type: 'text', id: 'pricing-margine', value: '30', oninput: pianificaAnteprima });
-  contenitore.appendChild(el('div', { class: 'campo', id: 'box-margine' }, el('label', { for: 'pricing-margine', text: 'Margine obiettivo %' }), margine));
+  contenitore.appendChild(el('div', { class: 'campo', id: 'box-margine' },
+    el('label', { for: 'pricing-margine', text: 'Margine obiettivo %' }), margine,
+    el('span', { class: 'aiuto', text: 'margine effettivo sul venduto' })));
 
   const arrotondamento = el('select', { id: 'pricing-round', onchange: pianificaAnteprima },
     (state.schema.arrotondamenti || ['0.01']).map((valore) => el('option', { value: valore, text: valore === 'none' ? 'nessuno' : `${valore} EUR` })));
@@ -139,6 +187,7 @@ function costruisciControlliPrezzo() {
   contenitore.appendChild(el('div', { class: 'campo' }, el('label', { for: 'pricing-round', text: 'Arrotondamento' }), arrotondamento));
 
   CAMPI_PREZZO.map(specDi).filter(Boolean).forEach((spec) => contenitore.appendChild(campoInput(spec)));
+  $('#pricing-mode').value = 'target_margin';
   aggiornaVisibilitaPrezzo();
 }
 
@@ -147,8 +196,9 @@ function aggiornaVisibilitaPrezzo() {
   $('#box-markup').hidden = modalita !== 'markup';
   $('#box-margine').hidden = modalita !== 'target_margin';
   $('#nota-righe').textContent = modalita === 'manual'
-    ? 'Modalita manuale: il prezzo unitario va inserito riga per riga.'
-    : 'Il prezzo unitario e\' modificabile riga per riga: diventa una deroga manuale.';
+    ? 'Modalità manuale: il prezzo va scritto riga per riga nella tabella qui sotto.'
+    : 'Codice, descrizione, quantità e prezzo sono modificabili riga per riga. Il prezzo parte già dal '
+      + 'margine impostato qui sopra; se lo riscrivi resta quello che hai scritto tu.';
 }
 
 /* ------------------------------------------------------------------ servizi */
@@ -183,7 +233,7 @@ function raccogliForm() {
   const form = {};
   $$('[data-campo]').forEach((controllo) => {
     const spec = specDi(controllo.dataset.campo);
-    const valore = controllo.value.trim();
+    const valore = valoreCampo(controllo);
     if (spec && spec.tipo === 'list') {
       form[spec.nome] = valore ? valore.split('\n').map((v) => v.trim()).filter(Boolean) : [];
     } else {
@@ -198,12 +248,15 @@ function raccogliForm() {
     rounding: $('#pricing-round').value,
     overrides: Object.values(state.overrides),
   };
+  form.righe = Object.values(state.righe);
   return form;
 }
 
 function salvaLocale() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ form: raccogliForm(), overrides: state.overrides }));
+    const form = raccogliForm();
+    delete form.righe;  // le modifiche di riga valgono per le BOM caricate ora
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ form, overrides: state.overrides }));
   } catch (errore) { /* quota piena o modalità privata: non è critico */ }
 }
 
@@ -220,7 +273,7 @@ function applicaForm(form) {
     if (nome === 'pricing' || nome === 'servizi_aggiuntivi') return;
     const controllo = document.querySelector(`[data-campo="${nome}"]`);
     if (!controllo) return;
-    controllo.value = Array.isArray(valore) ? valore.join('\n') : (valore ?? '');
+    impostaCampo(controllo, Array.isArray(valore) ? valore.join('\n') : String(valore ?? ''));
   });
   if (form.pricing) {
     $('#pricing-mode').value = form.pricing.mode || 'markup';
@@ -245,6 +298,11 @@ async function caricaFile(files, campo) {
   const risposta = await api('/api/upload', { method: 'POST', body: dati });
   state.session = risposta.session;
   state.boms = risposta.boms;
+  // Le modifiche di riga sono legate alla posizione: cambiando l'insieme delle
+  // BOM ripartono da zero, altrimenti finirebbero sulle righe sbagliate.
+  state.righe = {};
+  forzaRidisegnoRighe();
+  aggiornaContatoreModifiche();
   $('#stato-sessione').textContent = `sessione ${risposta.session.slice(0, 6)}`;
 
   if (risposta.template) {
@@ -267,7 +325,7 @@ async function caricaFile(files, campo) {
 function applicaPrefill(prefill) {
   Object.entries(prefill).forEach(([nome, valore]) => {
     const controllo = document.querySelector(`[data-campo="${nome}"]`);
-    if (controllo && !controllo.value.trim()) controllo.value = valore;
+    if (controllo && !valoreCampo(controllo)) impostaCampo(controllo, valore);
   });
 }
 
@@ -318,6 +376,9 @@ async function rimuoviBom(indice) {
     body: JSON.stringify({ session: state.session, indice }),
   });
   state.boms = risposta.boms;
+  state.righe = {};
+  forzaRidisegnoRighe();
+  aggiornaContatoreModifiche();
   disegnaBoms();
   pianificaAnteprima(0);
 }
@@ -366,42 +427,142 @@ function disegnaTotali(totali) {
   barra.title = `Margine ${totali.margine_percento} - soglia minima ${soglia}%`;
 }
 
+function modificaDi(indice, riferimento) {
+  if (!state.righe[indice]) state.righe[indice] = { indice, riferimento };
+  return state.righe[indice];
+}
+
+function registraModifica(tr, input) {
+  if (input) input.dataset.dirty = '1';
+  const indice = Number(tr.dataset.indice);
+  const modifica = modificaDi(indice, tr.dataset.riferimento);
+  // Vengono inviati solo i campi toccati davvero: cosi' correggere una
+  // descrizione non blocca anche il prezzo calcolato dal margine.
+  tr.querySelectorAll('input[data-colonna]').forEach((campo) => {
+    if (campo.dataset.dirty === '1') modifica[campo.dataset.colonna] = campo.value.trim();
+  });
+  aggiornaContatoreModifiche();
+  pianificaAnteprima();
+}
+
+function ripristinaRiga(indice) {
+  delete state.righe[indice];
+  aggiornaContatoreModifiche();
+  forzaRidisegnoRighe();
+  pianificaAnteprima(0);
+}
+
+function forzaRidisegnoRighe() {
+  const corpo = $('#tabella-righe tbody');
+  if (corpo) corpo.dataset.chiavi = '';
+}
+
+function aggiornaContatoreModifiche() {
+  const quante = Object.keys(state.righe).length;
+  const pulsante = $('#btn-azzera-righe');
+  if (!pulsante) return;
+  pulsante.hidden = quante === 0;
+  pulsante.textContent = quante === 1 ? 'Azzera 1 modifica di riga' : `Azzera ${quante} modifiche di riga`;
+}
+
+function cellaTesto(riga, colonna, valore, classe) {
+  const input = el('input', {
+    type: 'text', class: `cella ${classe || ''}`, value: valore || '',
+    title: 'Modificabile: finisce cosi\' nell\'offerta',
+  });
+  input.dataset.colonna = colonna;
+  input.dataset.valoreServer = valore || '';
+  if (state.righe[riga.indice] && state.righe[riga.indice][colonna] !== undefined) input.dataset.dirty = '1';
+  input.addEventListener('input', (ev) => registraModifica(ev.target.closest('tr'), ev.target));
+  return input;
+}
+
 function disegnaRighe(righe) {
   const corpo = $('#tabella-righe tbody');
-  corpo.innerHTML = '';
   if (!righe.length) {
+    corpo.dataset.chiavi = '';
+    corpo.innerHTML = '';
     corpo.appendChild(el('tr', {}, el('td', { colspan: '9', class: 'vuoto', text: 'Nessuna riga: carica una BOM.' })));
     return;
   }
-  const soglia = parseFloat(($('[data-campo="margine_minimo_percento"]').value || '0').replace(',', '.')) || 0;
+
+  const impronta = righe.map((riga) => `${riga.indice}:${riga.esclusa ? 1 : 0}`).join('|');
+  if (corpo.dataset.chiavi === impronta) {
+    aggiornaCelleRighe(righe);
+    return;
+  }
+  corpo.dataset.chiavi = impronta;
+  corpo.innerHTML = '';
 
   righe.forEach((riga) => {
-    const chiave = riga.sku || riga.descrizione;
-    const derogata = Boolean(state.overrides[chiave]);
-    const input = el('input', {
-      type: 'text', class: 'prezzo', value: riga.prezzo_unitario.replace(' EUR', ''),
-      title: 'Modifica per fissare un prezzo manuale su questa riga',
-    });
-    input.addEventListener('change', () => {
-      const valore = input.value.trim();
-      if (valore) state.overrides[chiave] = { match: chiave, sell_net_unit: valore };
-      else delete state.overrides[chiave];
-      pianificaAnteprima(0);
-    });
+    const tr = el('tr', { class: riga.esclusa ? 'riga-esclusa' : '' });
+    tr.dataset.indice = String(riga.indice);
+    tr.dataset.riferimento = riga.riferimento || '';
 
-    const sottoSoglia = soglia > 0 && riga.margine_valore < soglia && riga.modalita !== 'servizio';
-    corpo.appendChild(el('tr', { class: sottoSoglia ? 'sotto-soglia' : '' },
-      el('td', { class: 'num', text: String(riga.indice + 1) }),
-      el('td', { text: riga.sku }),
-      el('td', { text: riga.descrizione }),
-      el('td', { class: 'num', text: riga.quantita }),
-      el('td', { class: 'num', text: riga.costo }),
-      el('td', { class: 'num' }, input, derogata ? el('span', { class: 'manuale', text: 'deroga manuale' }) : null),
-      el('td', { class: 'num', text: riga.totale }),
-      el('td', { class: 'num', text: `${riga.margine} (${riga.margine_percento})` }),
-      el('td', {}, derogata
-        ? el('button', { type: 'button', class: 'link', onclick: () => { delete state.overrides[chiave]; pianificaAnteprima(0); } }, 'ripristina')
-        : null)));
+    tr.appendChild(el('td', { class: 'num numero', text: riga.esclusa ? '-' : String(riga.numero) }));
+    tr.appendChild(el('td', {}, cellaTesto(riga, 'sku', riga.sku, 'c-sku')));
+    tr.appendChild(el('td', {}, cellaTesto(riga, 'descrizione', riga.descrizione, 'c-desc')));
+    tr.appendChild(el('td', { class: 'num' }, cellaTesto(riga, 'quantita', riga.quantita_valore, 'c-qta num')));
+    tr.appendChild(el('td', { class: 'num costo', text: riga.costo, title: 'Costo di acquisto dalla BOM' }));
+    tr.appendChild(el('td', { class: 'num' },
+      cellaTesto(riga, 'prezzo_unitario', riga.prezzo_unitario.replace(' EUR', ''), 'c-prezzo prezzo num'),
+      el('span', { class: 'manuale', text: riga.modificata ? 'modificata' : '' })));
+    tr.appendChild(el('td', { class: 'num totale', text: riga.esclusa ? 'esclusa' : riga.totale }));
+    tr.appendChild(el('td', {
+      class: 'num margine',
+      text: riga.esclusa ? '-' : `${riga.margine} (${riga.margine_percento})`,
+    }));
+
+    const azioni = el('td', { class: 'azioni' });
+    if (riga.esclusa) {
+      azioni.appendChild(el('button', {
+        type: 'button', class: 'link', title: 'Rimetti la riga nell\'offerta',
+        onclick: () => { modificaDi(riga.indice, riga.riferimento).escludi = false; forzaRidisegnoRighe(); pianificaAnteprima(0); },
+      }, 'rimetti'));
+    } else {
+      azioni.appendChild(el('button', {
+        type: 'button', class: 'link', title: 'Togli la riga dall\'offerta',
+        onclick: () => { modificaDi(riga.indice, riga.riferimento).escludi = true; aggiornaContatoreModifiche(); forzaRidisegnoRighe(); pianificaAnteprima(0); },
+      }, 'togli'));
+    }
+    if (state.righe[riga.indice]) {
+      azioni.appendChild(el('button', {
+        type: 'button', class: 'link', title: 'Torna ai valori della BOM',
+        onclick: () => ripristinaRiga(riga.indice),
+      }, 'ripristina'));
+    }
+    tr.appendChild(azioni);
+    corpo.appendChild(tr);
+  });
+  aggiornaCelleRighe(righe);
+}
+
+function aggiornaCelleRighe(righe) {
+  const soglia = parseFloat(($('[data-campo="margine_minimo_percento"]').value || '0').replace(',', '.')) || 0;
+  righe.forEach((riga) => {
+    const tr = $(`#tabella-righe tbody tr[data-indice="${riga.indice}"]`);
+    if (!tr) return;
+    tr.querySelector('.numero').textContent = riga.esclusa ? '-' : String(riga.numero);
+    tr.querySelector('.costo').textContent = riga.costo;
+    tr.querySelector('.totale').textContent = riga.esclusa ? 'esclusa' : riga.totale;
+    tr.querySelector('.margine').textContent = riga.esclusa ? '-' : `${riga.margine} (${riga.margine_percento})`;
+    const manuale = tr.querySelector('.manuale');
+    if (manuale) manuale.textContent = riga.modificata ? 'modificata' : '';
+
+    const sottoSoglia = !riga.esclusa && soglia > 0 && riga.margine_valore < soglia && riga.modalita !== 'servizio';
+    tr.classList.toggle('sotto-soglia', sottoSoglia);
+
+    // I campi che l'utente sta compilando non vengono toccati.
+    tr.querySelectorAll('input[data-colonna]').forEach((campo) => {
+      if (document.activeElement === campo || campo.dataset.dirty === '1') return;
+      const valori = {
+        sku: riga.sku,
+        descrizione: riga.descrizione,
+        quantita: riga.quantita_valore,
+        prezzo_unitario: riga.prezzo_unitario.replace(' EUR', ''),
+      };
+      campo.value = valori[campo.dataset.colonna] ?? campo.value;
+    });
   });
 }
 
@@ -528,6 +689,13 @@ async function init() {
   collegaDropzone('#drop-bom', '#input-bom', 'bom');
   collegaDropzone('#drop-template', '#input-template', 'template');
   $('#btn-aggiungi-servizio').addEventListener('click', () => { $('#servizi').appendChild(rigaServizio()); });
+  $('#btn-azzera-righe').addEventListener('click', () => {
+    state.righe = {};
+    aggiornaContatoreModifiche();
+    forzaRidisegnoRighe();
+    pianificaAnteprima(0);
+  });
+  aggiornaContatoreModifiche();
   $('#btn-genera').addEventListener('click', genera);
   $('#btn-genera-2').addEventListener('click', genera);
   $('#btn-nuova').addEventListener('click', async () => {
@@ -539,6 +707,9 @@ async function init() {
     state.session = risposta.session;
     state.boms = [];
     state.overrides = {};
+    state.righe = {};
+    forzaRidisegnoRighe();
+    aggiornaContatoreModifiche();
     disegnaBoms();
     disegnaRighe([]);
     $('#esito').hidden = true;

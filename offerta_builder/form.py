@@ -35,6 +35,9 @@ class FieldSpec:
     required: bool = False
     example: str = ""
     choices: Sequence[str] = ()
+    # Valori proposti a tendina, ma non vincolanti: si può sempre scriverne
+    # uno diverso (a differenza di ``choices``, che invece è un elenco chiuso).
+    suggestions: Sequence[str] = ()
     default: Any = None
     help: str = ""
 
@@ -49,12 +52,35 @@ FIELDS: List[FieldSpec] = [
     FieldSpec("riferimento_offerta", "Riferimento offerta", required=True, example="OFF_ADC_26/0313_R03"),
     FieldSpec("data_offerta", "Data offerta", kind=KIND_DATE, required=True, example="19/07/2026"),
     FieldSpec("validita_offerta", "Validità offerta", kind=KIND_DATE, required=True, example="31/07/2026"),
-    FieldSpec("tipologia_pagamento", "Tipologia pagamento", required=True, example="Bonifico bancario"),
-    FieldSpec("condizioni_pagamento", "Condizioni pagamento", required=True, example="30 gg fine mese"),
-    FieldSpec("fatturazione", "Fatturazione", required=True, example="Annuale anticipata"),
-    FieldSpec("durata_contratto_anni", "Durata contratto (anni)", kind=KIND_INT, required=True, example="3"),
+    FieldSpec(
+        "tipologia_pagamento", "Tipologia pagamento", required=True, example="Bonifico bancario",
+        suggestions=(
+            "Bonifico bancario", "Bonifico bancario anticipato", "RiBa", "Rimessa diretta",
+            "Addebito SEPA", "Carta di credito",
+        ),
+    ),
+    FieldSpec(
+        "condizioni_pagamento", "Condizioni pagamento", required=True, example="30 gg fine mese",
+        suggestions=(
+            "Pagamento anticipato", "30 gg data fattura", "30 gg fine mese", "60 gg data fattura",
+            "60 gg fine mese", "90 gg fine mese", "50% all'ordine, 50% alla consegna",
+        ),
+    ),
+    FieldSpec(
+        "fatturazione", "Fatturazione", required=True, example="Annuale anticipata",
+        suggestions=(
+            "Unica soluzione all'ordine", "Annuale anticipata", "Annuale posticipata",
+            "Alla consegna", "Trimestrale anticipata", "Mensile", "A stato avanzamento lavori",
+        ),
+    ),
+    FieldSpec(
+        "durata_contratto_anni", "Durata contratto (anni)", kind=KIND_INT, required=True, example="3",
+        suggestions=("1", "2", "3", "4", "5"),
+    ),
     FieldSpec("iva_percento", "IVA %", kind=KIND_PERCENT, required=True, default=Decimal("22"), example="22"),
-    FieldSpec("margine_minimo_percento", "Margine minimo %", kind=KIND_PERCENT, required=True, example="30"),
+    FieldSpec("margine_minimo_percento", "Margine minimo %", kind=KIND_PERCENT, required=True,
+              default=Decimal("30"), example="30",
+              help="Soglia di controllo: sotto viene segnalata, non blocca l'offerta"),
     # --- opzionali ---------------------------------------------------------
     FieldSpec("indirizzo_cliente", "Indirizzo cliente", example="Via San Carlo 8/20, 41121 Modena"),
     FieldSpec("email_referente", "Email referente", example="serena.piantoni@cliente.it"),
@@ -94,6 +120,8 @@ def blank_form() -> Dict[str, Any]:
         else:
             data[spec.name] = ""
     data["servizi_aggiuntivi"] = [dict(DEFAULT_SERVICE_KEYS)]
+    # Correzioni manuali riga per riga, valorizzate dall'interfaccia web.
+    data["righe"] = []
     data["pricing"] = {
         "mode": "target_margin",
         "markup_percent": 0,

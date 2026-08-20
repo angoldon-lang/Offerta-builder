@@ -72,6 +72,11 @@ class BomItem:
     margin_value: Optional[Decimal] = None
     margin_percent: Optional[Decimal] = None
     pricing_mode: str = ""
+    # Posizione nella lista completa delle righe importate: e' la chiave con cui
+    # l'interfaccia identifica una riga da modificare.
+    source_index: int = -1
+    source_reference: str = ""
+    edited: bool = False
 
     def key(self) -> str:
         return self.sku or self.description[:60]
@@ -175,6 +180,7 @@ class PricedOffer:
     totals: OfferTotals = field(default_factory=OfferTotals)
     annual: List[AnnualBreakdown] = field(default_factory=list)
     boms: List[NormalizedBom] = field(default_factory=list)
+    excluded: List[BomItem] = field(default_factory=list)
     issues: List[Issue] = field(default_factory=list)
     content: Dict[str, Any] = field(default_factory=dict)
 
@@ -185,6 +191,7 @@ class PricedOffer:
                 "totals": self.totals.to_dict(),
                 "annual": [a.to_dict() for a in self.annual],
                 "items": [i.to_dict() for i in self.items],
+                "excluded": [i.to_dict() for i in self.excluded],
                 "boms": [b.to_dict() for b in self.boms],
                 "issues": [i.to_dict() for i in self.issues],
                 "content": self.content,

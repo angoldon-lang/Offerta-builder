@@ -103,9 +103,98 @@ def test_ripartizione_su_piu_annualita_senza_periodo():
     assert sum(a.total_net for a in offer.annual) == offer.totals.total_net
 
 
-def test_margine_sotto_soglia_blocca_il_totale():
+def test_margine_sotto_soglia_segnalato_senza_bloccare():
     policy = PricingPolicy(mode=MODE_MARKUP, markup_percent=Decimal("5"), min_margin_percent=Decimal("30"))
     offer = price_offer([bom_with(1000)], policy)
     codici = [i.code for i in offer.issues]
     assert "pricing.total_margin_below_threshold" in codici
     assert "pricing.margin_below_threshold" in codici
+    assert not [i for i in offer.issues if i.blocking]
+
+
+# ---------------------------------------------------------------------------
+# Modifiche manuali di riga
+# ---------------------------------------------------------------------------
+
+def bom_due_righe():
+    return NormalizedBom(
+        distributor="Test",
+        items=[
+            BomItem(line_no=1, sku="AAA", description="Licenza A", quantity=Decimal("2"),
+                    cost_net_unit=Decimal("100"), cost_net_total=Decimal("200"),
+                    list_price_unit=Decimal("150"), list_price_total=Decimal("300")),
+            BomItem(line_no=2, sku="BBB", description="Licenza B", quantity=Decimal("1"),
+                    cost_net_unit=Decimal("50"), cost_net_total=Decimal("50")),
+        ],
+    )
+
+
+def test_modifica_quantita_ricalcola_anche_il_costo():
+    from offerta_builder.pricing import LineEdit
+
+    policy = PricingPolicy(mode=MODE_MARKUP, markup_percent=Decimal("0"),
+                           line_edits=[LineEdit(index=0, reference="AAA", quantity=Decimal("5"))])
+    offer = price_offer([bom_due_righe()], policy)
+    riga = offer.items[0]
+    assert riga.quantity == Decimal("5")
+    assert riga.cost_net_total == Decimal("500.00")
+    assert riga.list_price_total == Decimal("750.00")
+    assert riga.sell_net_total == Decimal("500.00")
+
+
+def test_modifica_descrizione_e_codice():
+    from offerta_builder.pricing import LineEdit
+
+    policy = PricingPolicy(
+        mode=MODE_MARKUP, markup_percent=Decimal("10"),
+        line_edits=[LineEdit(index=1, reference="BBB", sku="BBB-NEW", description="Licenza B rinominata")],
+    )
+    offer = price_offer([bom_due_righe()], policy)
+    assert offer.items[1].sku == "BBB-NEW"
+    assert offer.items[1].description == "Licenza B rinominata"
+    assert offer.items[1].edited
+
+
+def test_riga_esclusa_non_entra_nei_totali():
+    from offerta_builder.pricing import LineEdit
+
+    policy = PricingPolicy(mode=MODE_MARKUP, markup_percent=Decimal("0"),
+                           line_edits=[LineEdit(index=0, reference="AAA", exclude=True)])
+    offer = price_offer([bom_due_righe()], policy)
+    assert len(offer.items) == 1
+    assert offer.items[0].sku == "BBB"
+    assert offer.totals.total_net == Decimal("50.00")
+    assert [i.sku for i in offer.excluded] == ["AAA"]
+
+
+def test_prezzo_manuale_di_riga_vince_sulla_politica():
+    from offerta_builder.pricing import LineEdit
+
+    policy = PricingPolicy(mode=MODE_TARGET_MARGIN, target_margin_percent=Decimal("30"),
+                           line_edits=[LineEdit(index=1, reference="BBB", sell_net_unit=Decimal("99"))])
+    offer = price_offer([bom_due_righe()], policy)
+    assert offer.items[1].sell_net_unit == Decimal("99.00")
+    assert offer.items[1].pricing_mode == "manual"
+    # l'altra riga resta sulla politica generale (a meno dell'arrotondamento)
+    assert abs(offer.items[0].margin_percent - Decimal("30")) < Decimal("0.01")
+
+
+def test_modifica_ignorata_se_la_riga_non_corrisponde():
+    """Modifiche rimaste da una BOM precedente non devono colpire righe altrui."""
+    from offerta_builder.pricing import LineEdit
+
+    policy = PricingPolicy(mode=MODE_MARKUP, markup_percent=Decimal("0"),
+                           line_edits=[LineEdit(index=0, reference="ZZZ", exclude=True)])
+    offer = price_offer([bom_due_righe()], policy)
+    assert len(offer.items) == 2
+    assert not offer.excluded
+
+
+def test_le_righe_normalizzate_non_vengono_modificate():
+    from offerta_builder.pricing import LineEdit
+
+    bom = bom_due_righe()
+    policy = PricingPolicy(mode=MODE_MARKUP, markup_percent=Decimal("0"),
+                           line_edits=[LineEdit(index=0, reference="AAA", quantity=Decimal("9"))])
+    price_offer([bom], policy)
+    assert bom.items[0].quantity == Decimal("2")  # la BOM resta quella letta dal file

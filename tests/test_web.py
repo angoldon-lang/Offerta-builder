@@ -174,3 +174,64 @@ def test_javascript_sintatticamente_valido():
     )
     esito = subprocess.run([node, "--check", percorso], capture_output=True)
     assert esito.returncode == 0, esito.stderr.decode("utf-8", "replace")
+
+
+def test_schema_espone_i_valori_proposti_per_le_condizioni(client):
+    campi = {campo["nome"]: campo for campo in client.get("/api/schema").get_json()["campi"]}
+    assert "30 gg fine mese" in campi["condizioni_pagamento"]["suggerimenti"]
+    assert "Bonifico bancario" in campi["tipologia_pagamento"]["suggerimenti"]
+    assert "Annuale anticipata" in campi["fatturazione"]["suggerimenti"]
+    assert campi["durata_contratto_anni"]["suggerimenti"] == ["1", "2", "3", "4", "5"]
+    # restano proposte, non un elenco chiuso
+    assert campi["condizioni_pagamento"]["scelte"] == []
+
+
+def test_anteprima_con_righe_modificate(client, csv_bom_path, form_data):
+    session = carica_bom(client, csv_bom_path).get_json()["session"]
+    form_data["righe"] = [
+        {"indice": 0, "riferimento": "2078005", "quantita": "3",
+         "descrizione": "SolarWinds NPM SLX (rinnovo)"},
+        {"indice": 1, "riferimento": "2078012", "escludi": True},
+    ]
+    dati = client.post("/api/anteprima", json={"session": session, "form": form_data}).get_json()
+
+    righe = {riga["indice"]: riga for riga in dati["righe"]}
+    assert righe[0]["descrizione"] == "SolarWinds NPM SLX (rinnovo)"
+    assert righe[0]["quantita"] == "3"
+    assert righe[0]["costo"] == "29.247,90 EUR"   # il costo segue la quantità
+    assert righe[0]["modificata"] is True
+    assert righe[1]["esclusa"] is True            # resta visibile, per poterla rimettere
+    assert righe[2]["numero"] == 2                # la numerazione salta la riga esclusa
+
+
+def test_riga_esclusa_non_finisce_nel_documento(client, csv_bom_path, form_data):
+    from offerta_builder.docx_builder import extract_text
+
+    session = carica_bom(client, csv_bom_path).get_json()["session"]
+    form_data["righe"] = [{"indice": 1, "riferimento": "2078012", "escludi": True}]
+    client.post("/api/genera", json={"session": session, "form": form_data})
+    store = client.application.extensions["offerta_sessions"]
+    docx = os.path.join(store.get(session).output_dir, "offerta.docx")
+    testo = extract_text(docx)
+    assert "2078005" in testo
+    assert "2078012" not in testo
+
+
+def test_modifica_di_riga_non_tocca_le_altre(client, csv_bom_path, form_data):
+    """Stesso codice ripetuto su piu' righe: la modifica vale solo sulla sua."""
+    session = carica_bom(client, csv_bom_path).get_json()["session"]
+    form_data["righe"] = [{"indice": 0, "riferimento": "2078005", "prezzo_unitario": "12.500,00"}]
+    dati = client.post("/api/anteprima", json={"session": session, "form": form_data}).get_json()
+    righe = {riga["indice"]: riga for riga in dati["righe"]}
+    assert righe[0]["prezzo_unitario"] == "12.500,00 EUR"
+    assert righe[1]["prezzo_unitario"] != "12.500,00 EUR"
+
+
+def test_margine_sotto_soglia_non_blocca_la_generazione(client, csv_bom_path, form_data):
+    form_data["margine_minimo_percento"] = 80          # irraggiungibile
+    form_data["pricing"] = {"mode": "markup", "markup_percent": "10", "rounding": "0.01"}
+    session = carica_bom(client, csv_bom_path).get_json()["session"]
+    dati = client.post("/api/genera", json={"session": session, "form": form_data}).get_json()
+    assert dati["stato"] == "ok"
+    assert dati["qa"]["status"] == "warn"
+    assert any(file["chiave"] == "docx" for file in dati["file"])

@@ -289,10 +289,12 @@ def _check_margin(offer: PricedOffer, threshold: Decimal) -> Check:
         if i.sell_net_total and i.margin_percent is not None and i.margin_percent < threshold
     ]
     if margin < threshold:
+        # Segnalato, mai bloccante: accettare un margine basso e' una decisione
+        # commerciale che spetta a chi firma l'offerta.
         return Check(
             "qa.margine",
             "Margine minimo",
-            LEVEL_FAIL,
+            LEVEL_WARN,
             f"Margine offerta {format_percent(margin)}, sotto la soglia minima {format_percent(threshold)}.",
             {"margine": margin, "soglia": threshold, "righe_sotto_soglia": below[:20]},
         )

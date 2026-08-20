@@ -67,19 +67,20 @@
       <button type="button" class="ghost" id="btn-aggiungi-servizio">+ Aggiungi servizio</button>
 
       <h3>Righe dell'offerta</h3>
-      <p class="sub" id="nota-righe">Il prezzo unitario è modificabile riga per riga: diventa una deroga manuale.</p>
+      <p class="sub" id="nota-righe">Codice, descrizione, quantità e prezzo sono modificabili riga per riga. Il prezzo parte già dal margine impostato qui sopra; se lo riscrivi diventa un prezzo fissato a mano.</p>
       <div class="table-scroll">
         <table id="tabella-righe">
           <thead>
             <tr>
-              <th>#</th><th>Codice</th><th>Descrizione</th><th class="num">Q.ta</th>
-              <th class="num">Costo</th><th class="num">Prezzo unitario</th><th class="num">Totale</th>
+              <th>#</th><th>Codice</th><th>Descrizione</th><th class="num">Q.tà</th>
+              <th class="num">Costo BOM</th><th class="num">Prezzo unitario</th><th class="num">Totale</th>
               <th class="num">Margine</th><th></th>
             </tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
+      <button type="button" class="ghost" id="btn-azzera-righe" hidden>Azzera le modifiche di riga</button>
     </section>
 
     <!-- 4. GENERA -->
