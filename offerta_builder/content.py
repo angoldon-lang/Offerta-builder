@@ -49,6 +49,7 @@ def build_content(offer: PricedOffer, form: Dict[str, Any]) -> Dict[str, Any]:
         "premessa": str(form.get("premessa", "")).strip() or _premessa(cliente, oggetto, vendor, durata, form),
         "descrizione_fornitura": _descrizione_fornitura(offer, vendor),
         "descrizione_servizi": _descrizione_servizi(offer, form),
+        "nota_servizi": _nota_servizi(offer),
         "requisiti": _as_list(form.get("requisiti_cliente")) or list(REQUISITI_STANDARD),
         "esclusioni": _as_list(form.get("esclusioni")) or list(ESCLUSIONI_STANDARD),
         "note_commerciali": _as_list(form.get("note_commerciali")),
@@ -112,6 +113,15 @@ def _descrizione_servizi(offer: PricedOffer, form: Dict[str, Any]) -> List[str]:
         prezzo = format_eur(servizio.sell_net_total, "EUR")
         righe.append(f"{servizio.description} - {prezzo} (IVA esclusa)")
     return righe
+
+
+def _nota_servizi(offer: PricedOffer) -> str:
+    """Riga descrittiva dei servizi, per i template che hanno una sezione dedicata."""
+    servizi = [item for item in offer.items if item.pricing_mode == "servizio"]
+    if not servizi:
+        return ""
+    voci = ", ".join(servizio.description for servizio in servizi[:4])
+    return f"Servizi professionali inclusi nella fornitura: {voci}."
 
 
 def _condizioni(form: Dict[str, Any]) -> Dict[str, str]:

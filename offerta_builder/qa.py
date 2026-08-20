@@ -348,18 +348,25 @@ def _check_document_totals(offer: PricedOffer, text: str) -> Check:
         return Check("qa.totale_documento", "Totale a documento", LEVEL_WARN, "Documento non analizzato.")
     from .money import format_eur
 
-    expected = format_eur(offer.totals.total_gross, "EUR")
-    expected_net = format_eur(offer.totals.total_net, "EUR")
+    lordo = format_eur(offer.totals.total_gross, "EUR").split(" ")[0]
+    netto = format_eur(offer.totals.total_net, "EUR").split(" ")[0]
     normalized = re.sub(r"\s+", " ", text)
-    if expected.split(" ")[0] in normalized and expected_net.split(" ")[0] in normalized:
+
+    if netto in normalized and lordo in normalized:
         return Check("qa.totale_documento", "Totale a documento", LEVEL_OK,
-                     f"Imponibile e totale ({expected}) presenti nel documento.")
+                     f"Imponibile e totale IVA inclusa ({lordo} EUR) presenti nel documento.")
+    if netto in normalized:
+        # Molti modelli espongono solo l'imponibile: e' una scelta di formato,
+        # purche' il numero stampato sia quello calcolato.
+        return Check("qa.totale_documento", "Totale a documento", LEVEL_OK,
+                     f"Imponibile ({netto} EUR) presente nel documento; il totale IVA inclusa non è riportato.")
     return Check(
         "qa.totale_documento",
         "Totale a documento",
         LEVEL_FAIL,
-        f"Totale calcolato ({expected}) non trovato nel documento generato.",
-        {"atteso_imponibile": expected_net, "atteso_totale": expected},
+        f"Imponibile calcolato ({netto} EUR) non trovato nel documento generato: "
+        "verifica che il template abbia i segnaposto dei totali.",
+        {"atteso_imponibile": netto, "atteso_totale": lordo},
     )
 
 

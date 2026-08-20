@@ -108,3 +108,17 @@ def test_report_serializzabile(offerta, form_data):
     payload = run_qa(offerta, form_data, document_text=documento(offerta)).to_dict()
     assert payload["status"] in {LEVEL_OK, LEVEL_WARN, LEVEL_FAIL}
     assert payload["totale_controlli"] == len(payload["controlli"])
+
+
+def test_totale_documento_ok_anche_col_solo_imponibile(offerta, form_data):
+    """Molti template AD stampano il netto e non il totale IVA inclusa."""
+    from offerta_builder.money import format_eur
+
+    testo = f"Netto a Voi Riservato {format_eur(offerta.totals.total_net)}"
+    report = run_qa(offerta, form_data, document_text=testo)
+    assert check(report, "qa.totale_documento").level == LEVEL_OK
+
+
+def test_totale_documento_fallisce_se_manca_l_imponibile(offerta, form_data):
+    report = run_qa(offerta, form_data, document_text="Offerta senza importi")
+    assert check(report, "qa.totale_documento").level == LEVEL_FAIL

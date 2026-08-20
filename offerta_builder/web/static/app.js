@@ -468,7 +468,7 @@ function aggiornaContatoreModifiche() {
 function cellaTesto(riga, colonna, valore, classe) {
   const input = el('input', {
     type: 'text', class: `cella ${classe || ''}`, value: valore || '',
-    title: 'Modificabile: finisce cosi\' nell\'offerta',
+    title: 'Clicca e scrivi: questo testo finisce nell\'offerta', placeholder: 'vuoto',
   });
   input.dataset.colonna = colonna;
   input.dataset.valoreServer = valore || '';

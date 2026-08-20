@@ -25,6 +25,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 
 from ..bom import normalize
 from ..bom.reader import SUPPORTED_EXTENSIONS
+from ..docx_builder import has_placeholders
 from ..form import FIELDS, blank_form, prefill_from_bom
 from ..models import NormalizedBom
 from ..money import format_eur, format_number, format_percent
@@ -46,6 +47,7 @@ class Session:
     bom_files: List[Dict[str, Any]] = field(default_factory=list)
     template_path: str = ""
     template_name: str = ""
+    template_ok: bool = True
     outputs: Dict[str, str] = field(default_factory=dict)
     touched_at: float = field(default_factory=time.time)
 
@@ -168,20 +170,30 @@ def create_app(work_root: Optional[str] = None) -> Flask:
             session.boms.append(bom)
             session.bom_files.append({"nome": os.path.basename(saved), "percorso": saved})
 
+        avvisi: List[str] = []
         template = request.files.get("template")
         if template and template.filename:
             saved = _save_upload(template, session.input_dir, TEMPLATE_EXTENSIONS, errors)
             if saved:
                 session.template_path = saved
                 session.template_name = os.path.basename(saved)
+                session.template_ok = has_placeholders(saved)
+                if not session.template_ok:
+                    avvisi.append(
+                        f"Il template '{session.template_name}' non contiene segnaposto: "
+                        "il documento uscirebbe identico al template, senza i dati dell'offerta. "
+                        "Vanno inseriti i campi (es. {{ cliente }}) e la tabella delle righe."
+                    )
 
         return jsonify(
             {
                 "session": session.id,
                 "boms": [_bom_payload(bom) for bom in session.boms],
                 "template": session.template_name,
+                "template_ok": session.template_ok,
                 "prefill": _prefill(session.boms),
                 "errori": errors,
+                "avvisi": avvisi,
             }
         )
 

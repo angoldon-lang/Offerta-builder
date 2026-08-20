@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from offerta_builder.docx_builder import extract_text
-from offerta_builder.pipeline import BlockingError, build_offer, policy_from_form
+from offerta_builder.pipeline import BlockingError, build_offer, policy_from_form, prepare_offer
 from offerta_builder.qa import LEVEL_FAIL
 
 
@@ -117,3 +117,66 @@ def test_servizi_dal_form_diventano_righe(tmp_path, csv_bom_path, form_data):
     servizi = [i for i in result.offer.items if i.pricing_mode == "servizio"]
     assert len(servizi) == 1
     assert servizi[0].sell_net_total == Decimal("2000.00")
+
+
+# ---------------------------------------------------------------------------
+# Template Word: celle unite, caselle di testo, assenza di segnaposto
+# ---------------------------------------------------------------------------
+
+def _docx_con_cella_unita(percorso):
+    from docx import Document
+
+    documento = Document()
+    tabella = documento.add_table(rows=2, cols=3)
+    unita = tabella.rows[0].cells[0].merge(tabella.rows[0].cells[1])
+    unita.text = "TOTALE MATERIALI"
+    tabella.rows[1].cells[0].text = "Riga"
+    documento.save(percorso)
+    return percorso
+
+
+def test_celle_unite_non_sembrano_titoli_duplicati(tmp_path):
+    """python-docx ripete la cella unita per ogni colonna: non è un duplicato."""
+    from offerta_builder.docx_builder import extract_text
+    from offerta_builder.qa import LEVEL_OK, _check_duplicated_titles
+
+    testo = extract_text(_docx_con_cella_unita(str(tmp_path / "t.docx")))
+    assert testo.count("TOTALE MATERIALI") == 1
+    assert _check_duplicated_titles(testo).level == LEVEL_OK
+
+
+def test_template_senza_segnaposto_viene_segnalato(tmp_path, csv_bom_path, form_data):
+    from offerta_builder.docx_builder import has_placeholders
+
+    template = _docx_con_cella_unita(str(tmp_path / "template.docx"))
+    assert has_placeholders(template) is False
+
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template, force=True,
+    )
+    assert any(i.code == "pipeline.template_senza_segnaposto" for i in result.issues)
+
+
+def test_template_di_esempio_ha_i_segnaposto(template_path):
+    from offerta_builder.docx_builder import has_placeholders
+
+    assert has_placeholders(template_path) is True
+
+
+def test_contesto_separa_prodotti_e_servizi(csv_bom_path, form_data):
+    from offerta_builder.bom import normalize
+    from offerta_builder.content import build_content
+    from offerta_builder.docx_builder import build_context
+
+    form_data["servizi_aggiuntivi"] = [
+        {"descrizione": "Installazione", "quantita": 1, "prezzo_unitario": 2000, "costo_unitario": 800}
+    ]
+    prepared = prepare_offer([normalize(csv_bom_path)], form_data)
+    contesto = build_context(prepared.offer, prepared.form, build_content(prepared.offer, prepared.form))
+
+    assert len(contesto["prodotti"]) == 4
+    assert len(contesto["servizi"]) == 1
+    assert contesto["totale_servizi"] == "2.000,00 EUR"
+    assert contesto["prodotti"][0]["descrizione_completa"].startswith("2078005 - SolarWinds")
+    assert "31/12/2026" in contesto["prodotti"][0]["descrizione_completa"]

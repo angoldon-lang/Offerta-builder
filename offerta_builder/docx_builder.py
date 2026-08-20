@@ -13,13 +13,27 @@ Due modalità:
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from .dates import to_it
+from .dates import parse_period, to_it
 from .models import PricedOffer
 from .money import format_eur, format_number, format_percent
 
 CURRENCY_LABEL = "EUR"
+
+
+def _periodo_leggibile(periodo: str) -> str:
+    """Periodo in formato italiano se è un intervallo di date, altrimenti com'è.
+
+    Nelle BOM il periodo può essere ``31 Dec 2026 - 30 Dec 2027`` oppure
+    un'etichetta come ``Prima fatturazione all'ordine``: la seconda va lasciata
+    stare.
+    """
+    inizio, fine = parse_period(periodo)
+    if inizio and fine:
+        return f"{to_it(inizio)} - {to_it(fine)}"
+    return periodo
 
 
 def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, Any]) -> Dict[str, Any]:
@@ -32,8 +46,12 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
                 "sku": item.sku,
                 "codice": item.sku,
                 "descrizione": item.description,
+                # Usata dai template con poche colonne: raccoglie in un unico
+                # testo codice, descrizione e periodo di competenza.
+                "descrizione_completa": " - ".join(p for p in (item.sku, item.description) if p)
+                + (f" ({_periodo_leggibile(item.period)})" if item.period else ""),
                 "categoria": item.category,
-                "periodo": item.period,
+                "periodo": _periodo_leggibile(item.period),
                 "quantita": format_number(item.quantity, 0 if item.quantity == item.quantity.to_integral_value() else 2),
                 "prezzo_unitario": format_eur(item.sell_net_unit, CURRENCY_LABEL),
                 "totale": format_eur(item.sell_net_total, CURRENCY_LABEL),
@@ -42,6 +60,17 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
                 "totale_ivato": format_eur(item.sell_gross_total, CURRENCY_LABEL),
             }
         )
+
+    prodotti = [r for r, item in zip(righe, offer.items) if item.pricing_mode != "servizio"]
+    servizi = [r for r, item in zip(righe, offer.items) if item.pricing_mode == "servizio"]
+    totale_prodotti = sum(
+        (item.sell_net_total or Decimal("0") for item in offer.items if item.pricing_mode != "servizio"),
+        Decimal("0"),
+    )
+    totale_servizi = sum(
+        (item.sell_net_total or Decimal("0") for item in offer.items if item.pricing_mode == "servizio"),
+        Decimal("0"),
+    )
 
     totals = offer.totals
     annualita = [
@@ -84,6 +113,11 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
         "iva_percento": format_percent(form.get("iva_percento", 0), 0),
         # economics
         "righe": righe,
+        "prodotti": prodotti,
+        "servizi": servizi,
+        "totale_prodotti": format_eur(totale_prodotti, CURRENCY_LABEL),
+        "totale_servizi": format_eur(totale_servizi, CURRENCY_LABEL),
+        "nota_servizi": content.get("nota_servizi", ""),
         "annualita": annualita,
         "totale_imponibile": format_eur(totals.total_net, CURRENCY_LABEL),
         "totale_iva": format_eur(totals.total_vat, CURRENCY_LABEL),
@@ -105,6 +139,32 @@ def render(context: Dict[str, Any], output_path: str, template_path: Optional[st
         document.save(output_path)
         return output_path
     return _render_fallback(context, output_path)
+
+
+def has_placeholders(template_path: str) -> bool:
+    """Il template contiene segnaposto compilabili?
+
+    Un template Word senza segnaposto viene copiato tale e quale: nessun dato
+    dell'offerta finisce dentro. Meglio dirlo subito, invece di far scoprire il
+    problema a documento generato.
+    """
+    import re
+    import zipfile
+
+    schema = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.S)
+    try:
+        with zipfile.ZipFile(template_path) as pacchetto:
+            for nome in pacchetto.namelist():
+                if not nome.endswith(".xml") or "/glossary/" in nome:
+                    continue
+                testo = pacchetto.read(nome).decode("utf-8", "replace")
+                # Word spezza il testo in run: si toglie il markup prima di cercare.
+                senza_tag = re.sub(r"<[^>]+>", "", testo)
+                if schema.search(senza_tag):
+                    return True
+    except (OSError, zipfile.BadZipFile):
+        return False
+    return False
 
 
 def template_placeholders(template_path: str) -> List[str]:
@@ -276,19 +336,59 @@ def _render_fallback(context: Dict[str, Any], output_path: str) -> str:
 
 
 def extract_text(docx_path: str) -> str:
-    """Testo completo del documento generato (paragrafi + tabelle), per il QA."""
+    """Testo completo del documento generato (paragrafi + tabelle), per il QA.
+
+    Le celle unite vengono restituite da python-docx una volta per colonna
+    occupata: contarle piu' volte farebbe sembrare duplicato un titolo che nel
+    documento compare una volta sola.
+    """
     from docx import Document
 
     document = Document(docx_path)
     parts: List[str] = [p.text for p in document.paragraphs]
     for table in document.tables:
         for row in table.rows:
+            viste = set()
             for cell in row.cells:
+                if id(cell._tc) in viste:
+                    continue
+                viste.add(id(cell._tc))
                 parts.extend(p.text for p in cell.paragraphs)
     for section in document.sections:
         for container in (section.header, section.footer):
             parts.extend(p.text for p in container.paragraphs)
+    parts.extend(_textbox_text(document))
     return "\n".join(part for part in parts if part)
+
+
+W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+MC_NS = "{http://schemas.openxmlformats.org/markup-compatibility/2006}"
+
+
+def _textbox_text(document) -> List[str]:
+    """Testo dentro le caselle di testo (nei template AD ci sta la copertina).
+
+    Word ne salva due copie, una moderna e una di ripiego per le versioni
+    vecchie: si legge solo la prima, altrimenti ogni riga risulterebbe doppia.
+    """
+    testi: List[str] = []
+    for casella in document.element.body.iter(f"{W_NS}txbxContent"):
+        if _dentro_fallback(casella):
+            continue
+        for paragrafo in casella.iter(f"{W_NS}p"):
+            testo = "".join(nodo.text or "" for nodo in paragrafo.iter(f"{W_NS}t"))
+            if testo.strip():
+                testi.append(testo)
+    return testi
+
+
+def _dentro_fallback(elemento) -> bool:
+    genitore = elemento.getparent()
+    while genitore is not None:
+        if genitore.tag == f"{MC_NS}Fallback":
+            return True
+        genitore = genitore.getparent()
+    return False
 
 
 def extract_headings(docx_path: str) -> List[str]:

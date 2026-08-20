@@ -44,6 +44,7 @@ invece di stimare.
 | Riepilogo interno | `offerta_builder/report.py` | HTML con costi, margini e anomalie, a uso interno |
 | Orchestratore | `offerta_builder/pipeline.py` | esegue il flusso e scrive gli output |
 | Interfaccia web | `offerta_builder/web/` | upload, form, anteprima e download nel browser (stessa pipeline) |
+| Preparazione template | `scripts/prepara_template_ad.py` | inserisce i segnaposto in un modello AD che ne è privo |
 
 ## Installazione
 
@@ -256,6 +257,20 @@ stessi segnaposto:
 
 > Le righe che contengono un tag `{%tr ... %}` vengono sostituite dal tag stesso:
 > i marcatori del ciclo vanno quindi in righe dedicate.
+
+Se il template caricato **non contiene segnaposto**, il documento esce identico
+al modello e l'interfaccia lo dice subito: senza campi da compilare non c'è modo
+di far entrare i dati dell'offerta.
+
+Per un template a due blocchi (materiali e servizi) sono disponibili anche
+`{{ prodotti }}` e `{{ servizi }}` con i rispettivi `{{ totale_prodotti }}` e
+`{{ totale_servizi }}`, e `{{ riga.descrizione_completa }}` che unisce codice,
+descrizione e periodo in un'unica cella. Il modello AD si può preparare in
+automatico:
+
+```bash
+python scripts/prepara_template_ad.py modello_ad.docx templates/offerta_ad.docx
+```
 
 Senza `--template` il documento viene costruito da zero (copertina, oggetto,
 premessa, offerta economica, condizioni, accettazione, allegati).

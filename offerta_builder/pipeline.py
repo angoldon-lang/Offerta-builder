@@ -14,10 +14,11 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from . import content as content_module
 from .bom import normalize
-from .docx_builder import build_context, extract_headings, extract_text, render
+from .docx_builder import build_context, extract_headings, extract_text, has_placeholders, render
 from .form import prefill_from_bom, validate
 from .models import (
     SEVERITY_BLOCKING,
+    SEVERITY_WARNING,
     Issue,
     NormalizedBom,
     PricedOffer,
@@ -221,6 +222,19 @@ def build_offer(
     offer.content = generated
 
     # 5. DOCX ---------------------------------------------------------------
+    if template_path and not has_placeholders(template_path):
+        issues.append(
+            Issue(
+                code="pipeline.template_senza_segnaposto",
+                severity=SEVERITY_WARNING,
+                message=(
+                    "Il template Word non contiene segnaposto: il documento esce identico al "
+                    "template, senza i dati dell'offerta. Vanno inseriti i campi tipo "
+                    "{{ cliente }} e la tabella con {%tr for riga in righe %}."
+                ),
+                where=os.path.basename(template_path),
+            )
+        )
     context = build_context(offer, clean_form, generated)
     docx_path = os.path.join(output_dir, OUTPUT_NAMES["docx"])
     render(context, docx_path, template_path=template_path)
