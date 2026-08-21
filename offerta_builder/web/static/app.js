@@ -64,7 +64,7 @@ async function api(percorso, opzioni = {}) {
     throw new Error('sessione scaduta');
   }
   const dati = await risposta.json().catch(() => ({}));
-  if (!risposta.ok) throw new Error(dati.messaggio || `Errore ${risposta.status}`);
+  if (!risposta.ok) throw new Error(dati.messaggio || dati.errore || `Errore ${risposta.status}`);
   return dati;
 }
 
@@ -357,7 +357,7 @@ async function caricaOffertaPrecedente(files) {
   toast('Lettura offerta precedente...');
 
   const risposta = await api('/api/offerta-precedente', { method: 'POST', body: dati })
-    .catch((errore) => { toast(errore.message); return null; });
+    .catch((errore) => { mostraErroreRinnovo(errore.message); return null; });
   if (!risposta || risposta.stato !== 'ok') return;
 
   state.session = risposta.session;
@@ -378,14 +378,32 @@ async function caricaOffertaPrecedente(files) {
   });
 
   $('#box-adeguamento').hidden = false;
+  if (risposta.template) {
+    const tagTemplate = $('#tag-template');
+    tagTemplate.textContent = risposta.template;
+    tagTemplate.hidden = false;
+  }
+
   const info = $('#rinnovo-info');
+  info.className = 'alert ok';
   info.textContent = `Rinnovo da "${risposta.file}": ${risposta.righe} righe recuperate, `
     + `totale precedente ${risposta.totale_precedente || 'n/d'}. `
-    + 'Date e riferimento sono già aggiornati; il margine resta sconosciuto finché non carichi una BOM aggiornata.';
+    + 'Date e riferimento sono già aggiornati; il margine resta sconosciuto finché non carichi una BOM aggiornata.'
+    + (risposta.template ? ' Il documento caricato fa anche da modello.' : '');
   info.hidden = false;
 
   disegnaBoms();
-  pianificaAnteprima(0);
+  // L'offerta rinnovata si genera subito: si trova già pronta da rileggere.
+  await anteprima();
+  await genera();
+}
+
+function mostraErroreRinnovo(messaggio) {
+  const info = $('#rinnovo-info');
+  info.className = 'alert error';
+  info.textContent = messaggio;
+  info.hidden = false;
+  toast('Offerta precedente non letta');
 }
 
 function applicaPrefill(prefill) {

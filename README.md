@@ -1,6 +1,6 @@
 # Offerta Builder
 
-Versione corrente: **0.7.0** — vedi [CHANGELOG.md](CHANGELOG.md).
+Versione corrente: **0.8.0** — vedi [CHANGELOG.md](CHANGELOG.md).
 
 Offer Builder **controllato**: importa le BOM dei distributori, applica le regole
 commerciali e genera l'offerta sul template Word aziendale.
@@ -90,9 +90,17 @@ scaricare.
 Trascina la vecchia offerta nell'area "Rinnovo: offerta precedente"
 ```
 
-Il documento viene riletto e riportato dentro il flusso: cliente, referente,
-P.IVA, oggetto, condizioni di vendita e **righe con i loro prezzi**. Il form si
-compila da solo, con:
+Si accettano **DOCX, PDF** (l'offerta come è stata inviata al cliente) e i
+formati Word vecchi (`.doc`, `.rtf`, `.odt`, convertiti al volo se c'è
+LibreOffice). Il documento viene riletto, l'offerta rinnovata **viene generata
+subito** e si trova pronta da scaricare.
+
+Se non hai caricato un modello, **il documento di partenza fa da modello**: è
+già l'offerta AD, con le sue sezioni e la sua impaginazione; le righe vecchie
+vengono sostituite da quelle nuove.
+
+Dal documento si recuperano cliente, referente, P.IVA, oggetto, condizioni di
+vendita e **righe con i loro prezzi**. Il form si compila da solo, con:
 
 - **data offerta** di oggi e **validità** a N giorni (impostabile);
 - **riferimento** con la revisione incrementata (`_R00` → `_R01`);

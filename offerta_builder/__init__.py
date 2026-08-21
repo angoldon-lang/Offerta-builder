@@ -5,6 +5,6 @@ mentre calcoli, margini, IVA, date e condizioni sono gestiti da regole
 deterministiche (moduli ``pricing``, ``qa``, ``dates``, ``money``).
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 __all__ = ["__version__"]

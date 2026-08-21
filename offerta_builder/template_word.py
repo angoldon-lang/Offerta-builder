@@ -246,6 +246,68 @@ def _trova_tabella_economica(documento):
     return None
 
 
+def _righe_gia_compilate(tabella) -> Dict[str, List[int]]:
+    """Righe dati di una tabella già compilata, divise fra materiali e servizi.
+
+    Serve per riallineare una vecchia offerta: le sue righe vengono sostituite
+    da quelle nuove, conservando la formattazione della prima.
+    """
+    gruppi: Dict[str, List[int]] = {"prodotti": [], "servizi": []}
+    corrente = "prodotti"
+    for indice, riga in enumerate(tabella.rows):
+        if indice == 0:
+            continue
+        testo = _testo_riga(riga)
+        if any(testo.startswith(etichetta) for etichetta in RIGA_TOTALE_OFFERTA):
+            break
+        if testo.startswith(RIGA_TOTALE_PRODOTTI):
+            corrente = "servizi"
+            continue
+        if testo.startswith(RIGA_TOTALE_SERVIZI):
+            corrente = ""
+            continue
+        celle = _celle_distinte(riga)
+        if not corrente or not celle or not celle[0].text.strip():
+            continue
+        if any(cella.text.strip() for cella in celle[1:]):
+            gruppi[corrente].append(indice)
+    return gruppi
+
+
+def _sostituisci_blocco(tabella, indici: List[int], righe: List[Dict[str, Any]]) -> None:
+    """Rimpiazza le righe esistenti di un blocco con quelle nuove.
+
+    Le righe da togliere si prendono come oggetti prima di inserire le nuove:
+    gli indici slitterebbero a ogni inserimento.
+    """
+    da_togliere = [tabella.rows[indice] for indice in indici]
+    modello = da_togliere[0]
+    for riga in righe:
+        _clona_riga(tabella, modello, [
+            riga.get("descrizione_completa") or riga.get("descrizione", ""),
+            riga.get("quantita", ""),
+            riga.get("totale", ""),
+        ])
+    for riga_vecchia in da_togliere:
+        _elimina_riga(riga_vecchia)
+
+
+def _scrivi_totali(tabella, context: Dict[str, Any]) -> None:
+    for etichetta, valore in (
+        (RIGA_TOTALE_PRODOTTI, context.get("totale_prodotti", "")),
+        (RIGA_TOTALE_SERVIZI, context.get("totale_servizi", "")),
+    ):
+        indice = _indice_riga(tabella, etichetta)
+        if indice is not None:
+            _scrivi_cella(_celle_distinte(tabella.rows[indice])[-1], str(valore))
+    indice_offerta = _indice_riga(tabella, *RIGA_TOTALE_OFFERTA)
+    if indice_offerta is not None:
+        _scrivi_cella(
+            _celle_distinte(tabella.rows[indice_offerta])[-1],
+            str(context.get("totale_imponibile", "")),
+        )
+
+
 def _compila_tabella_economica(documento, context: Dict[str, Any]) -> bool:
     tabella = _trova_tabella_economica(documento)
     if tabella is None:
@@ -267,6 +329,24 @@ def _compila_tabella_economica(documento, context: Dict[str, Any]) -> bool:
         indice for indice, riga in enumerate(tabella.rows)
         if RIGA_DETTAGLIO in _testo_riga(riga)
     ]
+
+    if not dettagli:
+        # Tabella già compilata: è il caso del rinnovo, dove la vecchia offerta
+        # fa da modello. Si sostituiscono le righe che ci sono già.
+        gruppi = _righe_gia_compilate(tabella)
+        if not gruppi["prodotti"] and not gruppi["servizi"]:
+            return False
+        for nome, righe_nuove in (("servizi", servizi), ("prodotti", prodotti)):
+            indici = gruppi[nome]
+            if not indici:
+                continue
+            if righe_nuove:
+                _sostituisci_blocco(tabella, indici, righe_nuove)
+            else:
+                for riga_vecchia in [tabella.rows[indice] for indice in indici]:
+                    _elimina_riga(riga_vecchia)
+        _scrivi_totali(tabella, context)
+        return True
 
     for posizione, (etichetta_generica, etichetta_totale, righe, testo_generico, totale) in enumerate(blocchi):
         modello_indice = dettagli[-1 - posizione] if len(dettagli) > posizione else None

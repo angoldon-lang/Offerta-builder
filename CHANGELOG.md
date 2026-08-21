@@ -4,6 +4,21 @@ Il numero di versione si legge con `offerta --version` o in alto a destra
 nell'interfaccia web. Se dopo un `git pull` il numero non cambia, l'aggiornamento
 non è arrivato.
 
+## 0.8.0
+
+**Il rinnovo funziona davvero.** Prima accettava solo il DOCX e su alcuni
+documenti rispondeva "documento non leggibile".
+
+- si caricano anche **PDF** e i formati Word vecchi (`.doc`, `.rtf`, `.odt`),
+  convertiti al volo con LibreOffice;
+- l'offerta rinnovata **viene generata subito** dopo il caricamento;
+- senza un modello caricato, il documento di partenza fa da modello: le sue
+  righe vengono sostituite da quelle nuove;
+- errori spiegati (formato non gestito, file protetto, documento rovinato)
+  invece di un messaggio unico;
+- nei PDF le tabelle spezzate fra due pagine vengono ricucite e le descrizioni
+  andate a capo non diventano righe in più.
+
 ## 0.7.0
 
 **Rinnovo di un'offerta scaduta.** Si carica la vecchia offerta e il programma

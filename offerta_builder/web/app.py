@@ -33,7 +33,7 @@ from ..form import FIELDS, blank_form, prefill_from_bom
 from ..models import NormalizedBom
 from ..money import format_eur, format_number, format_percent
 from ..pipeline import BlockingError, build_offer, prepare_offer
-from ..rinnovo import aggiorna_per_rinnovo, bom_da_offerta, read_offer
+from ..rinnovo import FORMATI_SUPPORTATI, aggiorna_per_rinnovo, bom_da_offerta, read_offer
 from ..pricing import MODES, ROUNDING_STEPS
 
 TEMPLATE_EXTENSIONS = {".docx"}
@@ -225,14 +225,20 @@ def create_app(work_root: Optional[str] = None) -> Flask:
         if not caricato or not caricato.filename:
             return jsonify({"stato": "errore", "messaggio": "Nessun documento caricato."}), 400
 
-        percorso = _save_upload(caricato, session.input_dir, TEMPLATE_EXTENSIONS, errors)
+        percorso = _save_upload(caricato, session.input_dir, FORMATI_SUPPORTATI, errors)
         if not percorso:
             return jsonify({"stato": "errore", "messaggio": " ".join(errors)}), 400
 
-        try:
-            importata = read_offer(percorso)
-        except Exception as exc:  # documento illeggibile
-            return jsonify({"stato": "errore", "messaggio": f"Documento non leggibile: {exc}"}), 400
+        importata = read_offer(percorso)
+        bloccanti = [i for i in importata.issues if i.blocking]
+        if bloccanti:
+            return jsonify(
+                {
+                    "stato": "errore",
+                    "messaggio": " ".join(i.message for i in bloccanti),
+                    "anomalie": [i.to_dict() for i in importata.issues],
+                }
+            ), 400
 
         try:
             giorni = int(request.form.get("giorni_validita") or 30)
@@ -240,6 +246,13 @@ def create_app(work_root: Optional[str] = None) -> Flask:
             giorni = 30
 
         session.offerta_precedente = os.path.basename(percorso)
+        if not session.template_path and importata.template_path:
+            # Senza un modello caricato, il documento da rinnovare fa da modello:
+            # è già l'offerta AD, con le sue sezioni e la sua impaginazione. Per i
+            # formati Word vecchi si usa la conversione in DOCX.
+            session.template_path = importata.template_path
+            session.template_name = session.offerta_precedente
+            session.template_ok = True
         # Le righe della vecchia offerta prendono il posto delle BOM: i prezzi
         # sono già quelli al cliente.
         session.boms = [bom_da_offerta(importata)]
@@ -256,6 +269,8 @@ def create_app(work_root: Optional[str] = None) -> Flask:
                 "totale_precedente": format_eur(importata.totale) if importata.totale is not None else "",
                 "anomalie": [i.to_dict() for i in importata.issues],
                 "boms": [_bom_payload(bom) for bom in session.boms],
+                "template": session.template_name,
+                "formati_ammessi": sorted(FORMATI_SUPPORTATI),
             }
         )
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "offerta-builder"
-version = "0.7.0"
+version = "0.8.0"
 description = "Offer Builder controllato: importa BOM distributori, applica regole commerciali deterministiche e genera l'offerta DOCX/PDF su template."
 requires-python = ">=3.10"
 dependencies = [

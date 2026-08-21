@@ -1,6 +1,7 @@
 """Rinnovo di un'offerta scaduta: rilettura, aggiornamento, riprezzatura."""
 
 import io
+import os
 from datetime import date
 from decimal import Decimal
 
@@ -199,3 +200,154 @@ def test_riga_inclusa_conservata_nel_rinnovo(tmp_path, csv_bom_path, form_data, 
     rinnovata = next(i for i in prep.offer.items if "ADCare" in i.description)
     assert rinnovata.display_price == "Incluso"
     assert rinnovata.sell_net_total == 0
+
+
+# ---------------------------------------------------------------- altri formati
+
+def _converti(percorso, formato, cartella):
+    """Converte con LibreOffice, se c'è; altrimenti il test si salta."""
+    import shutil
+    import subprocess
+
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        pytest.skip("LibreOffice non disponibile")
+    subprocess.run(
+        [soffice, "--headless", "--norestore", "--convert-to", formato,
+         "--outdir", str(cartella), percorso],
+        capture_output=True, check=False, timeout=200,
+    )
+    atteso = os.path.join(str(cartella), os.path.splitext(os.path.basename(percorso))[0] + "." + formato)
+    if not os.path.exists(atteso):
+        pytest.skip("conversione non riuscita in questo ambiente")
+    return atteso
+
+
+def test_rilettura_dal_pdf(tmp_path, offerta_vecchia):
+    """L'offerta inviata al cliente è un PDF: deve bastare quello."""
+    percorso, originale = offerta_vecchia
+    pdf = _converti(percorso, "pdf", tmp_path / "pdf")
+
+    letta = read_offer(pdf)
+    assert letta.source_format == "pdf"
+    assert letta.form["cliente"] == "BPER BANCA SPA"
+    assert letta.form["riferimento_offerta"] == "OFF_ADC_26/0313_R03"
+    assert len(letta.righe) == len(originale.offer.items)
+    assert not [i for i in letta.issues if i.blocking]
+
+
+def test_rilettura_da_word_vecchio(tmp_path, offerta_vecchia):
+    percorso, _ = offerta_vecchia
+    doc = _converti(percorso, "doc", tmp_path / "doc")
+
+    letta = read_offer(doc)
+    assert letta.form["cliente"] == "BPER BANCA SPA"
+    assert letta.righe
+    assert not [i for i in letta.issues if i.blocking]
+
+
+def test_formato_non_gestito_lo_dice_chiaramente(tmp_path):
+    percorso = tmp_path / "offerta.txt"
+    percorso.write_text("non e' un documento", encoding="utf-8")
+
+    letta = read_offer(str(percorso))
+    bloccanti = [i for i in letta.issues if i.blocking]
+    assert bloccanti and bloccanti[0].code == "rinnovo.formato"
+    assert "DOCX" in bloccanti[0].message
+
+
+def test_documento_rovinato_non_solleva_eccezioni(tmp_path):
+    percorso = tmp_path / "offerta.docx"
+    percorso.write_bytes(b"PK\x03\x04 rovinato")
+
+    letta = read_offer(str(percorso))
+    assert [i for i in letta.issues if i.code == "rinnovo.illeggibile"]
+
+
+# ------------------------------------------------- la vecchia offerta fa da modello
+
+def test_vecchia_offerta_usata_come_modello(tmp_path, offerta_vecchia, form_data):
+    """Rigenerando sul documento di partenza le righe vengono sostituite."""
+    from docx import Document
+
+    percorso, originale = offerta_vecchia
+    letta = read_offer(percorso)
+    form = aggiorna_per_rinnovo(letta, giorni_validita=30, oggi=date(2026, 9, 1))
+    form.update({"iva_percento": 22, "margine_minimo_percento": 30,
+                 "servizi_aggiuntivi": [], "adeguamento_percent": "10"})
+
+    result = build_offer(
+        boms=[bom_da_offerta(letta)], form=form, output_dir=str(tmp_path / "rinnovata"),
+        template_path=percorso,
+    )
+
+    tabella = Document(result.outputs["docx"]).tables[1]
+    descrizioni = [r.cells[2].text.strip() for r in tabella.rows[1:] if r.cells[2].text.strip()]
+    # nessuna riga duplicata: le vecchie sono state tolte
+    assert len(descrizioni) == len(originale.offer.items)
+    assert len(set(descrizioni)) == len(descrizioni)
+
+
+def test_endpoint_accetta_il_pdf(tmp_path, offerta_vecchia):
+    from offerta_builder.web.app import create_app
+
+    percorso, _ = offerta_vecchia
+    pdf = _converti(percorso, "pdf", tmp_path / "pdf")
+
+    app = create_app(work_root=str(tmp_path / "sessioni"))
+    app.config.update(TESTING=True)
+    with app.test_client() as client:
+        with open(pdf, "rb") as handle:
+            risposta = client.post(
+                "/api/offerta-precedente",
+                data={"offerta": (io.BytesIO(handle.read()), "offerta.pdf")},
+                content_type="multipart/form-data",
+            ).get_json()
+    assert risposta["stato"] == "ok"
+    assert risposta["righe"] >= 4
+    assert risposta["template"] == ""   # da un PDF non si ricava un modello
+
+
+def test_endpoint_spiega_il_formato_sbagliato(tmp_path):
+    from offerta_builder.web.app import create_app
+
+    app = create_app(work_root=str(tmp_path / "sessioni"))
+    app.config.update(TESTING=True)
+    with app.test_client() as client:
+        risposta = client.post(
+            "/api/offerta-precedente",
+            data={"offerta": (io.BytesIO(b"testo"), "offerta.txt")},
+            content_type="multipart/form-data",
+        )
+    assert risposta.status_code == 400
+    assert "estensione" in risposta.get_json()["messaggio"].lower()
+
+
+def test_word_vecchio_fa_da_modello_dopo_la_conversione(tmp_path, offerta_vecchia):
+    """Da un .doc si ricava anche il modello, passando per la conversione."""
+    from offerta_builder.web.app import create_app
+
+    percorso, _ = offerta_vecchia
+    doc = _converti(percorso, "doc", tmp_path / "doc")
+
+    app = create_app(work_root=str(tmp_path / "sessioni"))
+    app.config.update(TESTING=True)
+    with app.test_client() as client:
+        with open(doc, "rb") as handle:
+            risposta = client.post(
+                "/api/offerta-precedente",
+                data={"offerta": (io.BytesIO(handle.read()), "vecchia.doc")},
+                content_type="multipart/form-data",
+            ).get_json()
+    assert risposta["stato"] == "ok"
+    assert risposta["template"] == "vecchia.doc"
+
+
+def test_righe_spezzate_fra_due_pagine_si_ricongiungono(tmp_path, offerta_vecchia):
+    """Nel PDF una descrizione a cavallo di due pagine non diventa una riga in più."""
+    percorso, originale = offerta_vecchia
+    pdf = _converti(percorso, "pdf", tmp_path / "pdf")
+
+    letta = read_offer(pdf)
+    assert len(letta.righe) == len(originale.offer.items)
+    assert all(riga["prezzo_totale"] or riga["prezzo_testo"] for riga in letta.righe)
