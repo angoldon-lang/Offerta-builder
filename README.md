@@ -258,9 +258,30 @@ stessi segnaposto:
 > Le righe che contengono un tag `{%tr ... %}` vengono sostituite dal tag stesso:
 > i marcatori del ciclo vanno quindi in righe dedicate.
 
-Se il template caricato **non contiene segnaposto**, il documento esce identico
-al modello e l'interfaccia lo dice subito: senza campi da compilare non c'è modo
-di far entrare i dati dell'offerta.
+### Template Word senza segnaposto
+
+Un modello aziendale scritto a mano in Word si carica **così com'è**: se non ci
+sono segnaposto, il generatore riconosce le etichette del modello e ci scrive
+dentro, conservando stili e formattazione.
+
+Etichette riconosciute (modello AD):
+
+| Nel Word | Cosa ci finisce |
+| -------- | --------------- |
+| `[descrizione di dettaglio]` | una riga per articolo (codice, descrizione, periodo, quantità, totale) |
+| `[descrizione generica prodotti]` | l'oggetto dell'offerta |
+| `[descrizione generica servizi]` | la riga descrittiva dei servizi |
+| `TOTALE MATERIALI` / `TOTALE SERVIZI` | i due subtotali |
+| `Netto a Voi Riservato` | il totale dell'offerta |
+| `Tipologia di Pagamento`, `Condizioni di Pagamento`, `Fatturazione`, `Validità contratto`, `Validità offerta`, `Rinnovo` | il valore nella cella accanto |
+| `[Descrizione]` nella sezione Oggetto | l'oggetto |
+| `…` sotto Requisiti / Esclusioni | una voce per riga |
+| copertina: `Spett.le`, `P.IVA`, `Alla C.A. di`, `Autore:`, `Rif:`, `valida fino al` | i dati del form, anche dentro le caselle di testo |
+
+Se il blocco servizi non serve (nessun servizio in offerta) le sue righe vengono
+tolte. Se nel template non si riconosce né un'etichetta né un segnaposto,
+l'interfaccia lo dice al caricamento invece di far scoprire il problema a
+documento generato.
 
 Per un template a due blocchi (materiali e servizi) sono disponibili anche
 `{{ prodotti }}` e `{{ servizi }}` con i rispettivi `{{ totale_prodotti }}` e

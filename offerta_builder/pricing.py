@@ -384,6 +384,21 @@ def _check_thresholds(result: PricedOffer, policy: PricingPolicy) -> None:
     threshold = policy.min_margin_percent
     if threshold <= 0:
         return
+    # Se e' l'intera offerta a stare sotto soglia basta dirlo una volta: elencare
+    # anche tutte le righe seppellirebbe le altre segnalazioni.
+    if result.totals.margin_percent < threshold:
+        result.issues.append(
+            Issue(
+                code="pricing.total_margin_below_threshold",
+                severity=SEVERITY_WARNING,
+                message=(
+                    f"Margine totale offerta al {format_percent(result.totals.margin_percent)}, "
+                    f"sotto la soglia minima del {format_percent(threshold)}: da valutare."
+                ),
+                details={"margine": result.totals.margin_percent, "soglia": threshold},
+            )
+        )
+        return
     for item in result.items:
         if item.sell_net_total and item.margin_percent is not None and item.margin_percent < threshold:
             result.issues.append(
@@ -398,17 +413,4 @@ def _check_thresholds(result: PricedOffer, policy: PricingPolicy) -> None:
                     details={"margine": item.margin_percent, "soglia": threshold},
                 )
             )
-    if result.totals.margin_percent < threshold:
-        # Sotto soglia si segnala, non si blocca: decidere se accettare quel
-        # margine e' una scelta commerciale, non un errore di dati.
-        result.issues.append(
-            Issue(
-                code="pricing.total_margin_below_threshold",
-                severity=SEVERITY_WARNING,
-                message=(
-                    f"Margine totale offerta al {format_percent(result.totals.margin_percent)}, "
-                    f"sotto la soglia minima del {format_percent(threshold)}: da valutare."
-                ),
-                details={"margine": result.totals.margin_percent, "soglia": threshold},
-            )
-        )
+

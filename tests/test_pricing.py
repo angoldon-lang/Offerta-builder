@@ -103,13 +103,27 @@ def test_ripartizione_su_piu_annualita_senza_periodo():
     assert sum(a.total_net for a in offer.annual) == offer.totals.total_net
 
 
-def test_margine_sotto_soglia_segnalato_senza_bloccare():
+def test_margine_sotto_soglia_segnalato_una_volta_sola():
+    """Offerta tutta sotto soglia: una segnalazione, non una per riga."""
     policy = PricingPolicy(mode=MODE_MARKUP, markup_percent=Decimal("5"), min_margin_percent=Decimal("30"))
-    offer = price_offer([bom_with(1000)], policy)
+    offer = price_offer([bom_with(1000), bom_with(500, sku="BBB")], policy)
     codici = [i.code for i in offer.issues]
-    assert "pricing.total_margin_below_threshold" in codici
-    assert "pricing.margin_below_threshold" in codici
+    assert codici == ["pricing.total_margin_below_threshold"]
     assert not [i for i in offer.issues if i.blocking]
+
+
+def test_riga_sotto_soglia_segnalata_se_il_totale_regge():
+    """Se l'offerta nel complesso sta sopra soglia, si indicano le righe deboli."""
+    from offerta_builder.pricing import LineEdit
+
+    policy = PricingPolicy(
+        mode=MODE_TARGET_MARGIN, target_margin_percent=Decimal("50"), min_margin_percent=Decimal("30"),
+        line_edits=[LineEdit(index=1, reference="BBB", sell_net_unit=Decimal("55"))],
+    )
+    offer = price_offer([bom_due_righe()], policy)
+    codici = [i.code for i in offer.issues]
+    assert "pricing.margin_below_threshold" in codici
+    assert "pricing.total_margin_below_threshold" not in codici
 
 
 # ---------------------------------------------------------------------------

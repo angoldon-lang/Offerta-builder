@@ -14,10 +14,18 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from . import content as content_module
 from .bom import normalize
-from .docx_builder import build_context, extract_headings, extract_text, has_placeholders, render
+from .docx_builder import (
+    build_context,
+    extract_headings,
+    extract_text,
+    filled_sections,
+    has_placeholders,
+    render,
+)
 from .form import prefill_from_bom, validate
 from .models import (
     SEVERITY_BLOCKING,
+    SEVERITY_INFO,
     SEVERITY_WARNING,
     Issue,
     NormalizedBom,
@@ -222,22 +230,37 @@ def build_offer(
     offer.content = generated
 
     # 5. DOCX ---------------------------------------------------------------
-    if template_path and not has_placeholders(template_path):
-        issues.append(
-            Issue(
-                code="pipeline.template_senza_segnaposto",
-                severity=SEVERITY_WARNING,
-                message=(
-                    "Il template Word non contiene segnaposto: il documento esce identico al "
-                    "template, senza i dati dell'offerta. Vanno inseriti i campi tipo "
-                    "{{ cliente }} e la tabella con {%tr for riga in righe %}."
-                ),
-                where=os.path.basename(template_path),
-            )
-        )
     context = build_context(offer, clean_form, generated)
     docx_path = os.path.join(output_dir, OUTPUT_NAMES["docx"])
-    render(context, docx_path, template_path=template_path)
+
+    if template_path and not has_placeholders(template_path):
+        # Template Word normale: si compila riconoscendo le etichette.
+        sezioni = filled_sections(template_path, context, docx_path)
+        if sezioni:
+            issues.append(
+                Issue(
+                    code="pipeline.template_per_etichette",
+                    severity=SEVERITY_INFO,
+                    message="Template compilato riconoscendo le etichette: " + ", ".join(sezioni) + ".",
+                    where=os.path.basename(template_path),
+                )
+            )
+        else:
+            issues.append(
+                Issue(
+                    code="pipeline.template_non_riconosciuto",
+                    severity=SEVERITY_WARNING,
+                    message=(
+                        "Nel template non sono state riconosciute né etichette note né segnaposto: "
+                        "il documento esce identico al modello. Servono le righe tipo "
+                        "'[descrizione di dettaglio]' e 'Netto a Voi Riservato', oppure i campi "
+                        "{{ cliente }}."
+                    ),
+                    where=os.path.basename(template_path),
+                )
+            )
+    else:
+        render(context, docx_path, template_path=template_path)
 
     # 6. QA -----------------------------------------------------------------
     qa_report = run_qa(

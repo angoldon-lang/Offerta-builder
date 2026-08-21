@@ -26,6 +26,7 @@ from flask import Flask, jsonify, render_template, request, send_file
 from ..bom import normalize
 from ..bom.reader import SUPPORTED_EXTENSIONS
 from ..docx_builder import has_placeholders
+from ..template_word import recognized_sections
 from ..form import FIELDS, blank_form, prefill_from_bom
 from ..models import NormalizedBom
 from ..money import format_eur, format_number, format_percent
@@ -177,12 +178,19 @@ def create_app(work_root: Optional[str] = None) -> Flask:
             if saved:
                 session.template_path = saved
                 session.template_name = os.path.basename(saved)
-                session.template_ok = has_placeholders(saved)
-                if not session.template_ok:
+                sezioni = [] if has_placeholders(saved) else recognized_sections(saved)
+                session.template_ok = has_placeholders(saved) or bool(sezioni)
+                if sezioni:
                     avvisi.append(
-                        f"Il template '{session.template_name}' non contiene segnaposto: "
-                        "il documento uscirebbe identico al template, senza i dati dell'offerta. "
-                        "Vanno inseriti i campi (es. {{ cliente }}) e la tabella delle righe."
+                        f"'{session.template_name}' non ha segnaposto: verrà compilato "
+                        "riconoscendo le etichette del modello (" + ", ".join(sezioni) + ")."
+                    )
+                elif not session.template_ok:
+                    avvisi.append(
+                        f"Nel template '{session.template_name}' non sono state riconosciute né "
+                        "etichette note né segnaposto: il documento uscirebbe identico al modello. "
+                        "Servono le righe tipo '[descrizione di dettaglio]' e 'Netto a Voi "
+                        "Riservato', oppure i campi {{ cliente }}."
                     )
 
         return jsonify(

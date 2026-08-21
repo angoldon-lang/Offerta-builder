@@ -129,16 +129,35 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
 
 
 def render(context: Dict[str, Any], output_path: str, template_path: Optional[str] = None) -> str:
-    """Scrive il DOCX. Con template usa docxtpl, altrimenti costruisce il documento."""
+    """Scrive il DOCX scegliendo da solo come compilare il template.
+
+    * template con segnaposto Jinja  -> ``docxtpl``;
+    * template senza segnaposto      -> compilazione per etichette (il Word
+      aziendale si carica com'è, senza prepararlo);
+    * nessun template                -> documento costruito da zero.
+    """
     os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
     if template_path:
-        from docxtpl import DocxTemplate
+        if has_placeholders(template_path):
+            from docxtpl import DocxTemplate
 
-        document = DocxTemplate(template_path)
-        document.render(context)
-        document.save(output_path)
+            document = DocxTemplate(template_path)
+            document.render(context)
+            document.save(output_path)
+            return output_path
+
+        from .template_word import fill_document
+
+        fill_document(template_path, context, output_path)
         return output_path
     return _render_fallback(context, output_path)
+
+
+def filled_sections(template_path: str, context: Dict[str, Any], output_path: str) -> List[str]:
+    """Compila per etichette e dice quali sezioni ha riconosciuto."""
+    from .template_word import fill_document
+
+    return fill_document(template_path, context, output_path)
 
 
 def has_placeholders(template_path: str) -> bool:

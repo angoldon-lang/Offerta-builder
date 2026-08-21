@@ -145,7 +145,8 @@ def test_celle_unite_non_sembrano_titoli_duplicati(tmp_path):
     assert _check_duplicated_titles(testo).level == LEVEL_OK
 
 
-def test_template_senza_segnaposto_viene_segnalato(tmp_path, csv_bom_path, form_data):
+def test_template_non_riconosciuto_viene_segnalato(tmp_path, csv_bom_path, form_data):
+    """Word senza segnaposto né etichette note: il documento resta vuoto, e si dice."""
     from offerta_builder.docx_builder import has_placeholders
 
     template = _docx_con_cella_unita(str(tmp_path / "template.docx"))
@@ -155,7 +156,7 @@ def test_template_senza_segnaposto_viene_segnalato(tmp_path, csv_bom_path, form_
         bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
         template_path=template, force=True,
     )
-    assert any(i.code == "pipeline.template_senza_segnaposto" for i in result.issues)
+    assert any(i.code == "pipeline.template_non_riconosciuto" for i in result.issues)
 
 
 def test_template_di_esempio_ha_i_segnaposto(template_path):
@@ -180,3 +181,116 @@ def test_contesto_separa_prodotti_e_servizi(csv_bom_path, form_data):
     assert contesto["totale_servizi"] == "2.000,00 EUR"
     assert contesto["prodotti"][0]["descrizione_completa"].startswith("2078005 - SolarWinds")
     assert "31/12/2026" in contesto["prodotti"][0]["descrizione_completa"]
+
+
+# ---------------------------------------------------------------------------
+# Template Word normale (senza segnaposto), compilato per etichette
+# ---------------------------------------------------------------------------
+
+def _modello_ad(percorso):
+    """Riproduce la struttura del modello AD: tabelle con etichette, niente segnaposto."""
+    from docx import Document
+
+    documento = Document()
+    documento.add_heading("Oggetto", level=1)
+    documento.add_paragraph("[Descrizione]", style="List Bullet")
+    documento.add_heading("Requisiti", level=2)
+    documento.add_paragraph("…", style="List Bullet")
+    documento.add_heading("Esclusioni", level=2)
+    documento.add_paragraph("…", style="List Bullet")
+
+    documento.add_heading("Offerta Economica", level=1)
+    economica = documento.add_table(rows=8, cols=3)
+    economica.style = "Table Grid"
+    for indice, testo in enumerate(["Descrizione", "Quantità", "Prezzo €"]):
+        economica.rows[0].cells[indice].text = testo
+    economica.rows[1].cells[0].text = "[descrizione generica prodotti]"
+    economica.rows[2].cells[0].text = "[descrizione di dettaglio]"
+    economica.rows[3].cells[0].text = "TOTALE MATERIALI"
+    economica.rows[4].cells[0].text = "[descrizione generica servizi]"
+    economica.rows[5].cells[0].text = "[descrizione di dettaglio]"
+    economica.rows[6].cells[0].text = "TOTALE SERVIZI"
+    economica.rows[7].cells[0].text = "Netto a Voi Riservato"
+
+    documento.add_heading("Condizioni di vendita", level=1)
+    condizioni = documento.add_table(rows=6, cols=2)
+    condizioni.style = "Table Grid"
+    for indice, etichetta in enumerate([
+        "Tipologia di Pagamento", "Condizioni di Pagamento", "Fatturazione",
+        "Validità contratto", "Validità offerta", "Rinnovo",
+    ]):
+        condizioni.rows[indice].cells[0].text = etichetta
+    documento.save(percorso)
+    return percorso
+
+
+def test_word_senza_segnaposto_viene_compilato_per_etichette(tmp_path, csv_bom_path, form_data):
+    from offerta_builder.docx_builder import extract_text
+    from offerta_builder.template_word import recognized_sections
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    assert "offerta economica" in recognized_sections(template)
+
+    form_data["servizi_aggiuntivi"] = [
+        {"descrizione": "Installazione", "quantita": 1, "prezzo_unitario": 2000, "costo_unitario": 800}
+    ]
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    testo = extract_text(result.outputs["docx"])
+
+    assert "2078005" in testo                      # le righe della BOM sono entrate
+    assert "Installazione" in testo                # e anche i servizi
+    assert "[descrizione di dettaglio]" not in testo
+    assert "[descrizione generica prodotti]" not in testo
+    assert result.qa.status != "fail"
+    assert any(i.code == "pipeline.template_per_etichette" for i in result.issues)
+
+
+def test_totali_scritti_nelle_righe_giuste(tmp_path, csv_bom_path, form_data):
+    from docx import Document
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["servizi_aggiuntivi"] = [
+        {"descrizione": "Installazione", "quantita": 1, "prezzo_unitario": 2000, "costo_unitario": 800}
+    ]
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    tabella = Document(result.outputs["docx"]).tables[0]
+    from offerta_builder.money import format_eur
+
+    righe = {r.cells[0].text.strip().lower(): r.cells[-1].text.strip() for r in tabella.rows}
+    assert righe["totale servizi"] == "2.000,00 EUR"
+    assert righe["netto a voi riservato"] == format_eur(result.offer.totals.total_net)
+
+
+def test_blocco_servizi_rimosso_se_non_ci_sono_servizi(tmp_path, csv_bom_path, form_data):
+    from offerta_builder.docx_builder import extract_text
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["servizi_aggiuntivi"] = []
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    testo = extract_text(result.outputs["docx"])
+    assert "TOTALE SERVIZI" not in testo
+    assert "TOTALE MATERIALI" in testo
+
+
+def test_condizioni_scritte_accanto_alle_etichette(tmp_path, csv_bom_path, form_data):
+    from docx import Document
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    condizioni = Document(result.outputs["docx"]).tables[1]
+    valori = {r.cells[0].text.strip().lower(): r.cells[1].text.strip() for r in condizioni.rows}
+    assert valori["tipologia di pagamento"] == "Bonifico bancario"
+    assert valori["condizioni di pagamento"] == "30 gg fine mese"
+    assert valori["validità offerta"] == "31/07/2026"
