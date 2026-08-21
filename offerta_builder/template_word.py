@@ -56,6 +56,14 @@ RIGA_TOTALE_OFFERTA = ("netto a voi riservato", "totale offerta", "totale genera
 SEGNAPOSTO_OGGETTO = ("[descrizione]", "[oggetto]")
 PUNTO_ELENCO_VUOTO = ("…", "...")
 
+# Note che il modello rivolge a chi scrive l'offerta: non devono finire al
+# cliente, si tolgono sempre.
+NOTA_REDAZIONALE = re.compile(r"^\[\s*_*\s*(inserire|indicare|scrivere|nota)\b", re.IGNORECASE)
+
+TITOLI_REQUISITI = ("requisiti",)
+TITOLI_ESCLUSIONI = ("esclusioni",)
+TITOLO_SEZIONE_OPZIONALE = "requisiti ed esclusioni"
+
 
 def recognized_sections(template_path: str) -> List[str]:
     """Sezioni che il compilatore sa riconoscere in questo template.
@@ -289,6 +297,12 @@ def _compila_tabella_economica(documento, context: Dict[str, Any]) -> bool:
             else:
                 _elimina_riga(tabella.rows[indice_totale])
 
+    # Con un blocco solo il subtotale ripete il totale: si toglie.
+    if prodotti and not servizi:
+        indice_subtotale = _indice_riga(tabella, RIGA_TOTALE_PRODOTTI)
+        if indice_subtotale is not None:
+            _elimina_riga(tabella.rows[indice_subtotale])
+
     indice_offerta = _indice_riga(tabella, *RIGA_TOTALE_OFFERTA)
     if indice_offerta is not None:
         _scrivi_cella(
@@ -349,10 +363,65 @@ def _espandi_elenco(paragrafo, voci: List[str]) -> None:
         _scrivi(riferimento, str(voce))
 
 
+def _livello_titolo(paragrafo) -> int:
+    stile = (paragrafo.style.name if paragrafo.style is not None else "").lower()
+    match = re.search(r"(?:heading|titolo)\s*(\d)", stile)
+    return int(match.group(1)) if match else 0
+
+
+def _elimina_paragrafo(paragrafo) -> None:
+    elemento = paragrafo._p
+    genitore = elemento.getparent()
+    if genitore is not None:
+        genitore.remove(elemento)
+
+
+def _elimina_sezione(paragrafi, indice: int) -> None:
+    """Toglie un titolo e tutto quello che sta sotto, fino al titolo pari o superiore."""
+    livello = _livello_titolo(paragrafi[indice])
+    _elimina_paragrafo(paragrafi[indice])
+    for successivo in paragrafi[indice + 1:]:
+        prossimo_livello = _livello_titolo(successivo)
+        if prossimo_livello and prossimo_livello <= livello:
+            break
+        _elimina_paragrafo(successivo)
+
+
+def _rimuovi_sezioni_vuote(documento, context: Dict[str, Any]) -> None:
+    """Toglie Requisiti ed Esclusioni quando non ci sono voci da elencare.
+
+    Il modello AD le prevede "solo se necessario": lasciarle vuote significa non
+    volerle, e restare con un titolo senza contenuto fa brutta figura in offerta.
+    """
+    requisiti = context.get("requisiti") or []
+    esclusioni = context.get("esclusioni") or []
+    if requisiti and esclusioni:
+        return
+
+    paragrafi = list(documento.paragraphs)
+    for indice, paragrafo in enumerate(paragrafi):
+        titolo = paragrafo.text.strip().lower()
+        if not _livello_titolo(paragrafo) or not titolo:
+            continue
+        if titolo.startswith(TITOLO_SEZIONE_OPZIONALE) and not requisiti and not esclusioni:
+            _elimina_sezione(paragrafi, indice)
+            return
+        if titolo.startswith(TITOLI_REQUISITI) and not requisiti and titolo != TITOLO_SEZIONE_OPZIONALE:
+            _elimina_sezione(paragrafi, indice)
+        elif titolo.startswith(TITOLI_ESCLUSIONI) and not esclusioni:
+            _elimina_sezione(paragrafi, indice)
+
+
 def _compila_paragrafi(documento, context: Dict[str, Any]) -> bool:
     paragrafi = list(documento.paragraphs)
     scritto = False
 
+    for paragrafo in paragrafi:
+        if NOTA_REDAZIONALE.match(paragrafo.text.strip()):
+            _elimina_paragrafo(paragrafo)
+            scritto = True
+
+    paragrafi = list(documento.paragraphs)
     for indice, paragrafo in enumerate(paragrafi):
         testo = paragrafo.text.strip()
         spoglio = testo.lower()
@@ -375,4 +444,6 @@ def _compila_paragrafi(documento, context: Dict[str, Any]) -> bool:
             if successivo is not None and not successivo.text.strip():
                 _scrivi(successivo, str(context.get("premessa", "")))
                 scritto = True
+
+    _rimuovi_sezioni_vuote(documento, context)
     return scritto

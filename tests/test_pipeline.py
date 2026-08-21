@@ -178,9 +178,16 @@ def test_contesto_separa_prodotti_e_servizi(csv_bom_path, form_data):
 
     assert len(contesto["prodotti"]) == 4
     assert len(contesto["servizi"]) == 1
-    assert contesto["totale_servizi"] == "2.000,00 EUR"
-    assert contesto["prodotti"][0]["descrizione_completa"].startswith("2078005 - SolarWinds")
-    assert "31/12/2026" in contesto["prodotti"][0]["descrizione_completa"]
+    assert contesto["totale_servizi"] == "2.000,00 €"
+    # di default in offerta va la sola descrizione: niente codice, niente periodo
+    assert contesto["prodotti"][0]["descrizione_completa"] == "SolarWinds Network Performance Monitor SLX"
+
+    form_data["descrizioni_estese"] = True
+    prepared = prepare_offer([normalize(csv_bom_path)], form_data)
+    estese = build_context(prepared.offer, prepared.form, build_content(prepared.offer, prepared.form))
+    completa = estese["prodotti"][0]["descrizione_completa"]
+    assert completa.startswith("2078005 - SolarWinds")
+    assert "31/12/2026" in completa
 
 
 # ---------------------------------------------------------------------------
@@ -240,8 +247,8 @@ def test_word_senza_segnaposto_viene_compilato_per_etichette(tmp_path, csv_bom_p
     )
     testo = extract_text(result.outputs["docx"])
 
-    assert "2078005" in testo                      # le righe della BOM sono entrate
-    assert "Installazione" in testo                # e anche i servizi
+    assert "SolarWinds Network Performance Monitor SLX" in testo   # righe della BOM
+    assert "Installazione" in testo                                # e servizi
     assert "[descrizione di dettaglio]" not in testo
     assert "[descrizione generica prodotti]" not in testo
     assert result.qa.status != "fail"
@@ -263,7 +270,7 @@ def test_totali_scritti_nelle_righe_giuste(tmp_path, csv_bom_path, form_data):
     from offerta_builder.money import format_eur
 
     righe = {r.cells[0].text.strip().lower(): r.cells[-1].text.strip() for r in tabella.rows}
-    assert righe["totale servizi"] == "2.000,00 EUR"
+    assert righe["totale servizi"] == "2.000,00 €"
     assert righe["netto a voi riservato"] == format_eur(result.offer.totals.total_net)
 
 
@@ -277,8 +284,11 @@ def test_blocco_servizi_rimosso_se_non_ci_sono_servizi(tmp_path, csv_bom_path, f
         template_path=template,
     )
     testo = extract_text(result.outputs["docx"])
+    # Senza servizi restano solo i materiali: sparisce il blocco servizi e
+    # anche il subtotale, che ripeterebbe il totale.
     assert "TOTALE SERVIZI" not in testo
-    assert "TOTALE MATERIALI" in testo
+    assert "TOTALE MATERIALI" not in testo
+    assert "Netto a Voi Riservato" in testo
 
 
 def test_condizioni_scritte_accanto_alle_etichette(tmp_path, csv_bom_path, form_data):
@@ -294,3 +304,78 @@ def test_condizioni_scritte_accanto_alle_etichette(tmp_path, csv_bom_path, form_
     assert valori["tipologia di pagamento"] == "Bonifico bancario"
     assert valori["condizioni di pagamento"] == "30 gg fine mese"
     assert valori["validità offerta"] == "31/07/2026"
+
+
+def test_sezione_requisiti_ed_esclusioni_tolta_se_vuota(tmp_path, csv_bom_path, form_data):
+    """Il modello le prevede 'solo se necessario': vuote = sezione assente."""
+    from offerta_builder.docx_builder import extract_text
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["requisiti_cliente"] = []
+    form_data["esclusioni"] = []
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    testo = extract_text(result.outputs["docx"])
+    assert "Requisiti" not in testo
+    assert "Esclusioni" not in testo
+    assert "…" not in testo
+
+
+def test_solo_le_esclusioni_tolte(tmp_path, csv_bom_path, form_data):
+    from offerta_builder.docx_builder import extract_text
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["requisiti_cliente"] = ["Accesso VPN agli ambienti"]
+    form_data["esclusioni"] = []
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    testo = extract_text(result.outputs["docx"])
+    assert "Accesso VPN agli ambienti" in testo
+    assert "Esclusioni" not in testo
+
+
+def test_riga_libera_con_prezzo_a_parole(tmp_path, csv_bom_path, form_data):
+    """Una voce 'Incluso' compare in offerta senza alterare i totali."""
+    from docx import Document
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["righe_aggiuntive"] = [
+        {"descrizione": "ADCare - Backup", "quantita": 1, "prezzo_unitario": "Incluso"}
+    ]
+    senza = build_offer(
+        bom_paths=[csv_bom_path], form=dict(form_data, righe_aggiuntive=[]),
+        output_dir=str(tmp_path / "senza"),
+    )
+    con = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "con"),
+        template_path=template,
+    )
+    assert con.offer.totals.total_net == senza.offer.totals.total_net
+
+    tabella = Document(con.outputs["docx"]).tables[0]
+    riga = next(r for r in tabella.rows if "ADCare" in r.cells[0].text)
+    assert riga.cells[-1].text.strip() == "Incluso"
+
+
+def test_note_redazionali_del_modello_rimosse(tmp_path, csv_bom_path, form_data):
+    from docx import Document
+
+    from offerta_builder.docx_builder import extract_text
+
+    percorso = str(tmp_path / "modello_ad.docx")
+    _modello_ad(percorso)
+    documento = Document(percorso)
+    documento.paragraphs[0].insert_paragraph_before(
+        "[ ___________inserire il paragrafo su Requisiti ed Esclusioni solo se necessario]"
+    )
+    documento.save(percorso)
+
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=percorso,
+    )
+    assert "inserire il paragrafo" not in extract_text(result.outputs["docx"])

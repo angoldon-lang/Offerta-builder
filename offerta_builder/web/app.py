@@ -28,6 +28,7 @@ from ..bom import normalize
 from ..bom.reader import SUPPORTED_EXTENSIONS
 from ..docx_builder import has_placeholders
 from ..template_word import recognized_sections
+from ..content import ESCLUSIONI_STANDARD, REQUISITI_STANDARD
 from ..form import FIELDS, blank_form, prefill_from_bom
 from ..models import NormalizedBom
 from ..money import format_eur, format_number, format_percent
@@ -148,6 +149,10 @@ def create_app(work_root: Optional[str] = None) -> Flask:
                 "estensioni_template": sorted(TEMPLATE_EXTENSIONS),
                 "oggi": date.today().strftime("%d/%m/%Y"),
                 "versione": __version__,
+                "testi_standard": {
+                    "requisiti_cliente": list(REQUISITI_STANDARD),
+                    "esclusioni": list(ESCLUSIONI_STANDARD),
+                },
             }
         )
 
@@ -452,9 +457,10 @@ def _line_payload(item, esclusa: bool = False) -> Dict[str, Any]:
         "quantita_valore": str(item.quantity),
         "costo": format_eur(item.cost_net_total),
         "costo_unitario": format_eur(item.cost_net_unit),
-        "prezzo_unitario": format_eur(item.sell_net_unit),
+        # Una voce "Incluso" mostra il testo, non lo zero.
+        "prezzo_unitario": item.display_price or format_eur(item.sell_net_unit),
         "prezzo_unitario_valore": float(item.sell_net_unit or Decimal("0")),
-        "totale": format_eur(item.sell_net_total),
+        "totale": item.display_price or format_eur(item.sell_net_total),
         "margine": format_eur(item.margin_value),
         "margine_percento": format_percent(item.margin_percent),
         "margine_valore": float(item.margin_percent or Decimal("0")),

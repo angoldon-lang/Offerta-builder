@@ -4,6 +4,20 @@ Il numero di versione si legge con `offerta --version` o in alto a destra
 nell'interfaccia web. Se dopo un `git pull` il numero non cambia, l'aggiornamento
 non è arrivato.
 
+## 0.6.0
+
+**Semplificare l'offerta.** La proposta calcolata dalla BOM è un punto di
+partenza: ora si può ridurre e correggere prima di generare.
+
+- voci aggiunte a mano nel blocco scelto (materiali o servizi), con prezzo
+  anche testuale: una riga `Incluso` non altera i totali;
+- requisiti ed esclusioni vuoti = sezione assente nel documento; i testi
+  standard sono precompilati e si possono cancellare;
+- il subtotale "TOTALE MATERIALI" sparisce quando non ci sono servizi;
+- in offerta va la sola descrizione (codice e periodo solo se richiesto);
+- importi con il simbolo `€`;
+- tolte dal documento le note che il modello rivolge a chi scrive l'offerta.
+
 ## 0.5.0
 
 **Il Word aziendale si carica com'è.** Un template senza segnaposto viene

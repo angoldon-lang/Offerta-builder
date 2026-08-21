@@ -20,7 +20,15 @@ from .dates import parse_period, to_it
 from .models import PricedOffer
 from .money import format_eur, format_number, format_percent
 
-CURRENCY_LABEL = "EUR"
+CURRENCY_LABEL = "€"
+
+
+def _descrizione_riga(item, estese: bool) -> str:
+    """Descrizione da stampare in offerta."""
+    if not estese:
+        return item.description
+    testo = " - ".join(parte for parte in (item.sku, item.description) if parte)
+    return testo + (f" ({_periodo_leggibile(item.period)})" if item.period else "")
 
 
 def _periodo_leggibile(periodo: str) -> str:
@@ -38,6 +46,7 @@ def _periodo_leggibile(periodo: str) -> str:
 
 def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, Any]) -> Dict[str, Any]:
     """Prepara il contesto per il template: valori già formattati, niente calcoli."""
+    estese = bool(form.get("descrizioni_estese"))
     righe: List[Dict[str, str]] = []
     for index, item in enumerate(offer.items, start=1):
         righe.append(
@@ -46,15 +55,15 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
                 "sku": item.sku,
                 "codice": item.sku,
                 "descrizione": item.description,
-                # Usata dai template con poche colonne: raccoglie in un unico
-                # testo codice, descrizione e periodo di competenza.
-                "descrizione_completa": " - ".join(p for p in (item.sku, item.description) if p)
-                + (f" ({_periodo_leggibile(item.period)})" if item.period else ""),
+                # Usata dai template con poche colonne. Di default è la sola
+                # descrizione: codice e periodo si aggiungono solo se richiesto,
+                # perché in offerta appesantiscono la riga.
+                "descrizione_completa": _descrizione_riga(item, estese),
                 "categoria": item.category,
                 "periodo": _periodo_leggibile(item.period),
                 "quantita": format_number(item.quantity, 0 if item.quantity == item.quantity.to_integral_value() else 2),
                 "prezzo_unitario": format_eur(item.sell_net_unit, CURRENCY_LABEL),
-                "totale": format_eur(item.sell_net_total, CURRENCY_LABEL),
+                "totale": item.display_price or format_eur(item.sell_net_total, CURRENCY_LABEL),
                 "iva_percento": format_percent(item.vat_percent, 0),
                 "iva": format_eur(item.vat_total, CURRENCY_LABEL),
                 "totale_ivato": format_eur(item.sell_gross_total, CURRENCY_LABEL),

@@ -136,23 +136,34 @@ def _line_edits_from_form(form: Dict[str, Any]) -> List[LineEdit]:
 
 
 def _services_from_form(form: Dict[str, Any]) -> List[ServiceLine]:
+    """Voci aggiunte a mano: servizi e righe libere fra i materiali."""
     services: List[ServiceLine] = []
-    for raw in form.get("servizi_aggiuntivi") or []:
-        if isinstance(raw, str):
-            continue  # senza prezzo non è una riga d'offerta: resta testo descrittivo
-        if not isinstance(raw, dict) or not str(raw.get("descrizione", "")).strip():
-            continue
-        services.append(
-            ServiceLine(
-                description=str(raw["descrizione"]).strip(),
-                quantity=_dec(raw.get("quantita"), Decimal("1")),
-                unit_price=_dec(raw.get("prezzo_unitario"), Decimal("0")),
-                unit_cost=_dec(raw.get("costo_unitario"), Decimal("0")),
-                category=str(raw.get("categoria") or "Servizi"),
-                period=str(raw.get("periodo") or ""),
-                notes=str(raw.get("note") or ""),
+    sorgenti = [
+        (form.get("servizi_aggiuntivi") or [], "servizi"),
+        (form.get("righe_aggiuntive") or [], "prodotti"),
+    ]
+    for elenco, blocco_default in sorgenti:
+        for raw in elenco:
+            if not isinstance(raw, dict) or not str(raw.get("descrizione", "")).strip():
+                continue
+            prezzo = raw.get("prezzo_unitario")
+            importo = parse_decimal(prezzo)
+            # Un prezzo scritto a parole ("Incluso", "a canone") vale zero nei
+            # totali e si stampa così com'è nel documento.
+            etichetta = "" if importo is not None else str(prezzo or "").strip()
+            services.append(
+                ServiceLine(
+                    description=str(raw["descrizione"]).strip(),
+                    quantity=_dec(raw.get("quantita"), Decimal("1")),
+                    unit_price=importo if importo is not None else Decimal("0"),
+                    unit_cost=_dec(raw.get("costo_unitario"), Decimal("0")),
+                    category=str(raw.get("categoria") or ("Servizi" if blocco_default == "servizi" else "")),
+                    period=str(raw.get("periodo") or ""),
+                    notes=str(raw.get("note") or ""),
+                    block=str(raw.get("blocco") or blocco_default),
+                    display_price=etichetta,
+                )
             )
-        )
     return services
 
 

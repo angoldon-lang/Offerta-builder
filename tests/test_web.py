@@ -48,7 +48,7 @@ def test_upload_bom_restituisce_righe_e_prefill(client, csv_bom_path):
     bom = dati["boms"][0]
     assert bom["distributore"] == "V-Valley"
     assert bom["righe"] == 4
-    assert bom["costo"] == "18.924,56 EUR"
+    assert bom["costo"] == "18.924,56 €"
     assert len(bom["articoli"]) == 4
     assert dati["prefill"]["cliente"] == "BPER Banca S.p.A"
     assert dati["errori"] == []
@@ -69,9 +69,9 @@ def test_anteprima_calcola_lato_server(client, csv_bom_path, form_data):
     session = carica_bom(client, csv_bom_path).get_json()["session"]
     dati = client.post("/api/anteprima", json={"session": session, "form": form_data}).get_json()
     assert dati["stato"] == "ok"
-    assert dati["totali"]["costo"] == "18.924,56 EUR"
+    assert dati["totali"]["costo"] == "18.924,56 €"
     assert len(dati["righe"]) == 4
-    assert dati["righe"][0]["prezzo_unitario"].endswith("EUR")
+    assert dati["righe"][0]["prezzo_unitario"].endswith("€")
 
 
 def test_anteprima_con_deroga_manuale(client, csv_bom_path, form_data):
@@ -84,7 +84,7 @@ def test_anteprima_con_deroga_manuale(client, csv_bom_path, form_data):
     }
     dati = client.post("/api/anteprima", json={"session": session, "form": form_data}).get_json()
     riga = next(r for r in dati["righe"] if r["sku"] == "2078005")
-    assert riga["prezzo_unitario"] == "12.500,00 EUR"
+    assert riga["prezzo_unitario"] == "12.500,00 €"
     assert riga["modalita"] == "manual"
 
 
@@ -197,7 +197,7 @@ def test_anteprima_con_righe_modificate(client, csv_bom_path, form_data):
     righe = {riga["indice"]: riga for riga in dati["righe"]}
     assert righe[0]["descrizione"] == "SolarWinds NPM SLX (rinnovo)"
     assert righe[0]["quantita"] == "3"
-    assert righe[0]["costo"] == "29.247,90 EUR"   # il costo segue la quantità
+    assert righe[0]["costo"] == "29.247,90 €"   # il costo segue la quantità
     assert righe[0]["modificata"] is True
     assert righe[1]["esclusa"] is True            # resta visibile, per poterla rimettere
     assert righe[2]["numero"] == 2                # la numerazione salta la riga esclusa
@@ -222,8 +222,8 @@ def test_modifica_di_riga_non_tocca_le_altre(client, csv_bom_path, form_data):
     form_data["righe"] = [{"indice": 0, "riferimento": "2078005", "prezzo_unitario": "12.500,00"}]
     dati = client.post("/api/anteprima", json={"session": session, "form": form_data}).get_json()
     righe = {riga["indice"]: riga for riga in dati["righe"]}
-    assert righe[0]["prezzo_unitario"] == "12.500,00 EUR"
-    assert righe[1]["prezzo_unitario"] != "12.500,00 EUR"
+    assert righe[0]["prezzo_unitario"] == "12.500,00 €"
+    assert righe[1]["prezzo_unitario"] != "12.500,00 €"
 
 
 def test_margine_sotto_soglia_non_blocca_la_generazione(client, csv_bom_path, form_data):

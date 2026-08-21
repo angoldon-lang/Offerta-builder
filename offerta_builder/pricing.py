@@ -274,7 +274,8 @@ def _price_service(service: ServiceLine, policy: PricingPolicy, result: PricedOf
         cost_net_total=q2(service.unit_cost * qty),
         notes=service.notes,
     )
-    item.pricing_mode = "servizio"
+    item.pricing_mode = "servizio" if service.block != "prodotti" else "riga_libera"
+    item.display_price = service.display_price
     item.sell_net_unit = q2(service.unit_price)
     item.sell_net_total = q2(item.sell_net_unit * qty)
     item.vat_percent = q2(policy.vat_percent)
@@ -284,12 +285,14 @@ def _price_service(service: ServiceLine, policy: PricingPolicy, result: PricedOf
     item.margin_percent = (
         q4(item.margin_value / item.sell_net_total * Decimal("100")) if item.sell_net_total else Decimal("0")
     )
-    if item.sell_net_total == 0:
+    if item.sell_net_total == 0 and not service.display_price:
+        # Una voce marcata "Incluso" e' voluta: l'avviso vale solo per lo zero
+        # lasciato per distrazione.
         result.issues.append(
             Issue(
                 code="pricing.service_zero",
                 severity=SEVERITY_WARNING,
-                message=f"Servizio '{service.description}' valorizzato a zero: confermare se è incluso.",
+                message=f"Voce '{service.description}' valorizzata a zero: confermare se è inclusa.",
             )
         )
     return item

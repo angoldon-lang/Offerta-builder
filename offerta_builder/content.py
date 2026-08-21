@@ -50,8 +50,11 @@ def build_content(offer: PricedOffer, form: Dict[str, Any]) -> Dict[str, Any]:
         "descrizione_fornitura": _descrizione_fornitura(offer, vendor),
         "descrizione_servizi": _descrizione_servizi(offer, form),
         "nota_servizi": _nota_servizi(offer),
-        "requisiti": _as_list(form.get("requisiti_cliente")) or list(REQUISITI_STANDARD),
-        "esclusioni": _as_list(form.get("esclusioni")) or list(ESCLUSIONI_STANDARD),
+        # Se il campo c'è ma è vuoto, l'utente ha scelto di non metterli: la
+        # sezione sparisce dal documento. I testi standard valgono solo quando
+        # il campo non è stato proprio compilato (flusso da riga di comando).
+        "requisiti": _lista_o_standard(form, "requisiti_cliente", REQUISITI_STANDARD),
+        "esclusioni": _lista_o_standard(form, "esclusioni", ESCLUSIONI_STANDARD),
         "note_commerciali": _as_list(form.get("note_commerciali")),
         "allegati": _as_list(form.get("allegati")) or list(ALLEGATI_STANDARD),
         "condizioni": _condizioni(form),
@@ -64,6 +67,12 @@ def _first_vendor(offer: PricedOffer) -> str:
         if bom.vendor:
             return bom.vendor
     return ""
+
+
+def _lista_o_standard(form: Dict[str, Any], campo: str, standard: List[str]) -> List[str]:
+    if campo not in form:
+        return list(standard)
+    return _as_list(form.get(campo))
 
 
 def _as_list(value: Any) -> List[str]:

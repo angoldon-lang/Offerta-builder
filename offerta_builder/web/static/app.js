@@ -187,6 +187,12 @@ function costruisciControlliPrezzo() {
   contenitore.appendChild(el('div', { class: 'campo' }, el('label', { for: 'pricing-round', text: 'Arrotondamento' }), arrotondamento));
 
   CAMPI_PREZZO.map(specDi).filter(Boolean).forEach((spec) => contenitore.appendChild(campoInput(spec)));
+
+  const estese = el('input', { type: 'checkbox', id: 'pricing-descrizioni', onchange: pianificaAnteprima });
+  contenitore.appendChild(el('div', { class: 'campo' },
+    el('label', { for: 'pricing-descrizioni', text: 'Descrizioni' }),
+    el('label', { class: 'check' }, estese, ' codice e periodo in descrizione')));
+
   $('#pricing-mode').value = 'target_margin';
   aggiornaVisibilitaPrezzo();
 }
@@ -204,19 +210,24 @@ function aggiornaVisibilitaPrezzo() {
 /* ------------------------------------------------------------------ servizi */
 
 function rigaServizio(dati = {}) {
-  const campo = (etichetta, chiave, valore, tipo = 'text') =>
+  const campo = (etichetta, chiave, valore, titolo = '') =>
     el('div', { class: 'campo' },
       el('label', { text: etichetta }),
-      el('input', { type: tipo, value: valore ?? '', 'data-servizio': chiave, oninput: pianificaAnteprima }));
+      el('input', { type: 'text', value: valore ?? '', 'data-servizio': chiave, title: titolo, oninput: pianificaAnteprima }));
 
-  const riga = el('div', { class: 'servizio' },
+  const blocco = el('select', { 'data-servizio': 'blocco', onchange: pianificaAnteprima },
+    el('option', { value: 'prodotti', text: 'Materiali' }),
+    el('option', { value: 'servizi', text: 'Servizi' }));
+  blocco.value = dati.blocco || 'servizi';
+
+  return el('div', { class: 'servizio' },
     campo('Descrizione', 'descrizione', dati.descrizione),
+    el('div', { class: 'campo' }, el('label', { text: 'Blocco' }), blocco),
     campo('Q.tà', 'quantita', dati.quantita ?? 1),
-    campo('Prezzo unitario', 'prezzo_unitario', dati.prezzo_unitario),
-    campo('Costo unitario', 'costo_unitario', dati.costo_unitario),
+    campo('Prezzo', 'prezzo_unitario', dati.prezzo_unitario, 'Un importo, oppure un testo come "Incluso"'),
+    campo('Costo', 'costo_unitario', dati.costo_unitario),
     el('button', { type: 'button', class: 'ghost', title: 'Rimuovi', onclick: (ev) => { ev.target.closest('.servizio').remove(); pianificaAnteprima(); } }, 'X')
   );
-  return riga;
 }
 
 function raccogliServizi() {
@@ -249,6 +260,11 @@ function raccogliForm() {
     overrides: Object.values(state.overrides),
   };
   form.righe = Object.values(state.righe);
+  form.descrizioni_estese = $('#pricing-descrizioni').checked;
+  // Le voci aggiunte a mano vanno nel blocco scelto: materiali o servizi.
+  const voci = raccogliServizi();
+  form.servizi_aggiuntivi = voci.filter((v) => v.blocco !== 'prodotti');
+  form.righe_aggiuntive = voci.filter((v) => v.blocco === 'prodotti');
   return form;
 }
 
@@ -275,6 +291,7 @@ function applicaForm(form) {
     if (!controllo) return;
     impostaCampo(controllo, Array.isArray(valore) ? valore.join('\n') : String(valore ?? ''));
   });
+  if (form.descrizioni_estese !== undefined) $('#pricing-descrizioni').checked = Boolean(form.descrizioni_estese);
   if (form.pricing) {
     $('#pricing-mode').value = form.pricing.mode || 'markup';
     $('#pricing-markup').value = form.pricing.markup_percent ?? '30';
@@ -284,7 +301,8 @@ function applicaForm(form) {
   }
   const servizi = $('#servizi');
   servizi.innerHTML = '';
-  (form.servizi_aggiuntivi || []).forEach((servizio) => servizi.appendChild(rigaServizio(servizio)));
+  (form.servizi_aggiuntivi || []).forEach((voce) => servizi.appendChild(rigaServizio({ ...voce, blocco: 'servizi' })));
+  (form.righe_aggiuntive || []).forEach((voce) => servizi.appendChild(rigaServizio({ ...voce, blocco: 'prodotti' })));
 }
 
 /* ------------------------------------------------------------------ upload */
@@ -465,6 +483,12 @@ function aggiornaContatoreModifiche() {
   pulsante.textContent = quante === 1 ? 'Azzera 1 modifica di riga' : `Azzera ${quante} modifiche di riga`;
 }
 
+function prezzoModificabile(riga) {
+  // Nel campo si scrive l'importo senza simbolo, oppure il testo così com'è
+  // (una riga "Incluso" resta "Incluso").
+  return (riga.prezzo_unitario || '').replace(' €', '').replace(' EUR', '');
+}
+
 function cellaTesto(riga, colonna, valore, classe) {
   const input = el('input', {
     type: 'text', class: `cella ${classe || ''}`, value: valore || '',
@@ -505,7 +529,7 @@ function disegnaRighe(righe) {
     tr.appendChild(el('td', { class: 'num' }, cellaTesto(riga, 'quantita', riga.quantita_valore, 'c-qta num')));
     tr.appendChild(el('td', { class: 'num costo', text: riga.costo, title: 'Costo di acquisto dalla BOM' }));
     tr.appendChild(el('td', { class: 'num' },
-      cellaTesto(riga, 'prezzo_unitario', riga.prezzo_unitario.replace(' EUR', ''), 'c-prezzo prezzo num'),
+      cellaTesto(riga, 'prezzo_unitario', prezzoModificabile(riga), 'c-prezzo prezzo num'),
       el('span', { class: 'manuale', text: riga.modificata ? 'modificata' : '' })));
     tr.appendChild(el('td', { class: 'num totale', text: riga.esclusa ? 'esclusa' : riga.totale }));
     tr.appendChild(el('td', {
@@ -559,7 +583,7 @@ function aggiornaCelleRighe(righe) {
         sku: riga.sku,
         descrizione: riga.descrizione,
         quantita: riga.quantita_valore,
-        prezzo_unitario: riga.prezzo_unitario.replace(' EUR', ''),
+        prezzo_unitario: prezzoModificabile(riga),
       };
       campo.value = valori[campo.dataset.colonna] ?? campo.value;
     });
@@ -685,6 +709,13 @@ async function init() {
 
   const data = document.querySelector('[data-campo="data_offerta"]');
   if (data && !data.value) data.value = state.schema.oggi;
+
+  // Requisiti ed esclusioni partono dai testi standard: si modificano o si
+  // svuotano, e se restano vuoti la sezione non compare in offerta.
+  Object.entries(state.schema.testi_standard || {}).forEach(([nome, voci]) => {
+    const controllo = document.querySelector(`[data-campo="${nome}"]`);
+    if (controllo && !controllo.value.trim()) controllo.value = voci.join('\n');
+  });
 
   collegaDropzone('#drop-bom', '#input-bom', 'bom');
   collegaDropzone('#drop-template', '#input-template', 'template');

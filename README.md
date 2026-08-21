@@ -1,6 +1,6 @@
 # Offerta Builder
 
-Versione corrente: **0.5.0** — vedi [CHANGELOG.md](CHANGELOG.md).
+Versione corrente: **0.6.0** — vedi [CHANGELOG.md](CHANGELOG.md).
 
 Offer Builder **controllato**: importa le BOM dei distributori, applica le regole
 commerciali e genera l'offerta sul template Word aziendale.
@@ -82,6 +82,24 @@ backend. Le condizioni di vendita si scelgono da tendine con i valori più usati
 (con "Altro" per scriverne uno diverso), i totali e il margine restano aggiornati
 nel riepilogo laterale, e al termine trovi l'esito dei controlli QA con i file da
 scaricare.
+
+### Semplificare l'offerta
+
+Non tutto quello che arriva dalla BOM va stampato com'è. Nella tabella si può:
+
+- **riscrivere le descrizioni** (di default in offerta va la sola descrizione;
+  con l'opzione *codice e periodo in descrizione* si aggiungono SKU e periodo);
+- **togliere righe** con `togli` — per esempio accorpare tre annualità in una;
+- **aggiungere voci a mano**, scegliendo se metterle fra i materiali o fra i
+  servizi; il prezzo può essere un importo **oppure un testo**, per esempio
+  `Incluso`: vale zero nei totali e in offerta si legge come l'hai scritto;
+- **svuotare requisiti ed esclusioni**: se i campi restano vuoti, la sezione
+  "Requisiti ed Esclusioni" non compare nel documento (il modello AD la prevede
+  "solo se necessario"). I testi standard sono precompilati: si modificano o si
+  cancellano.
+
+Quando c'è un solo blocco (nessun servizio) il subtotale "TOTALE MATERIALI"
+viene tolto, perché ripeterebbe il "Netto a Voi Riservato".
 
 Le **righe dell'offerta sono modificabili una per una**: codice, descrizione,
 quantità e prezzo. Il prezzo mostrato è già quello al cliente, calcolato dal

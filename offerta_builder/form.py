@@ -86,6 +86,8 @@ FIELDS: List[FieldSpec] = [
     FieldSpec("email_referente", "Email referente", example="serena.piantoni@cliente.it"),
     FieldSpec("servizi_aggiuntivi", "Servizi aggiuntivi", kind=KIND_LIST,
               help="Elenco di oggetti {descrizione, quantita, prezzo_unitario, costo_unitario}"),
+    FieldSpec("righe_aggiuntive", "Righe libere in offerta", kind=KIND_LIST,
+              help="Voci da aggiungere fra i materiali; il prezzo può essere un testo (es. Incluso)"),
     FieldSpec("requisiti_cliente", "Requisiti a carico del cliente", kind=KIND_LIST),
     FieldSpec("esclusioni", "Esclusioni", kind=KIND_LIST),
     FieldSpec("rinnovo", "Rinnovo", kind=KIND_CHOICE,
@@ -122,6 +124,7 @@ def blank_form() -> Dict[str, Any]:
     data["servizi_aggiuntivi"] = [dict(DEFAULT_SERVICE_KEYS)]
     # Correzioni manuali riga per riga, valorizzate dall'interfaccia web.
     data["righe"] = []
+    data["righe_aggiuntive"] = []
     data["pricing"] = {
         "mode": "target_margin",
         "markup_percent": 0,
@@ -381,14 +384,14 @@ def _validate_services(clean: Dict[str, Any]) -> List[Issue]:
                     where="servizi_aggiuntivi",
                 )
             )
-        if parse_decimal(service.get("prezzo_unitario")) is None:
+        if not str(service.get("prezzo_unitario", "")).strip():
             issues.append(
                 Issue(
                     code="form.service_no_price",
                     severity=SEVERITY_BLOCKING,
                     message=(
                         f"Servizio '{service.get('descrizione', '#' + str(index))}': prezzo unitario "
-                        "mancante. Il prezzo dei servizi non viene mai stimato dal sistema."
+                        "mancante. Scrivi l'importo, oppure un testo come 'Incluso' se non si fattura."
                     ),
                     where="servizi_aggiuntivi",
                 )

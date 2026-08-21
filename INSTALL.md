@@ -269,7 +269,7 @@ pip install pytest
 python -m pytest
 ```
 
-Attesi: **141 test verdi**.
+Attesi: **147 test verdi**.
 
 ---
 

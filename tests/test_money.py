@@ -12,7 +12,7 @@ from offerta_builder.money import (
     [
         ("1.234,56", Decimal("1234.56")),
         ("1,234.56", Decimal("1234.56")),
-        ("9.749,30 EUR", Decimal("9749.30")),
+        ("9.749,30 €", Decimal("9749.30")),
         ("66,02%", Decimal("66.02")),
         ("(1.200,00)", Decimal("-1200.00")),
         ("28692.00", Decimal("28692.00")),
@@ -32,8 +32,8 @@ def test_parse_decimal_valori_non_numerici(raw):
 
 
 def test_formattazione_italiana():
-    assert format_eur("12186.93") == "12.186,93 EUR"
-    assert format_eur("-1200") == "-1.200,00 EUR"
+    assert format_eur("12186.93") == "12.186,93 €"
+    assert format_eur("-1200") == "-1.200,00 €"
     assert format_percent("66.0234") == "66,02%"
     assert format_number(1500) == "1.500"
 

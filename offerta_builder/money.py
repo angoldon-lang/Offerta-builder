@@ -119,8 +119,8 @@ def relative_gap(a: Optional[Decimal], b: Optional[Decimal]) -> Decimal:
     return abs(a - b) / base
 
 
-def format_eur(value: Number, symbol: str = "EUR") -> str:
-    """Formatta un importo in stile italiano: ``12.186,93 EUR``."""
+def format_eur(value: Number, symbol: str = "€") -> str:
+    """Formatta un importo in stile italiano: ``12.186,93 €``."""
     amount = q2(value)
     negative = amount < 0
     digits = f"{abs(amount):,.2f}"

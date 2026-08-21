@@ -77,6 +77,9 @@ class BomItem:
     source_index: int = -1
     source_reference: str = ""
     edited: bool = False
+    # Testo da stampare al posto dell'importo (es. "Incluso"): vale zero nei
+    # totali, ma in offerta si legge come l'ha scritto l'operatore.
+    display_price: str = ""
 
     def key(self) -> str:
         return self.sku or self.description[:60]
@@ -133,7 +136,7 @@ class NormalizedBom:
 
 @dataclass
 class ServiceLine:
-    """Servizio aggiuntivo AD (installazione, PM, supporto, canone...)."""
+    """Voce aggiunta a mano: servizio, canone, oppure una riga "Incluso"."""
 
     description: str
     quantity: Decimal = Decimal("1")
@@ -142,6 +145,9 @@ class ServiceLine:
     category: str = "Servizi"
     period: str = ""
     notes: str = ""
+    # "prodotti" la mette fra i materiali, "servizi" nel blocco servizi.
+    block: str = "servizi"
+    display_price: str = ""
 
 
 @dataclass

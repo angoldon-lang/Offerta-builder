@@ -212,3 +212,26 @@ def test_le_righe_normalizzate_non_vengono_modificate():
                            line_edits=[LineEdit(index=0, reference="AAA", quantity=Decimal("9"))])
     price_offer([bom], policy)
     assert bom.items[0].quantity == Decimal("2")  # la BOM resta quella letta dal file
+
+
+def test_voce_inclusa_non_genera_avvisi():
+    """"Incluso" è una scelta, non una dimenticanza."""
+    policy = PricingPolicy(
+        mode=MODE_MARKUP, markup_percent=Decimal("0"),
+        services=[ServiceLine(description="ADCare", block="prodotti", display_price="Incluso")],
+    )
+    offer = price_offer([bom_with(100)], policy)
+    assert [i.code for i in offer.issues if i.code == "pricing.service_zero"] == []
+    riga = offer.items[-1]
+    assert riga.display_price == "Incluso"
+    assert riga.sell_net_total == Decimal("0.00")
+    assert riga.pricing_mode == "riga_libera"
+
+
+def test_servizio_a_zero_senza_etichetta_avvisa():
+    policy = PricingPolicy(
+        mode=MODE_MARKUP, markup_percent=Decimal("0"),
+        services=[ServiceLine(description="Supporto")],
+    )
+    offer = price_offer([bom_with(100)], policy)
+    assert any(i.code == "pricing.service_zero" for i in offer.issues)
