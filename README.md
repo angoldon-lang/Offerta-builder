@@ -1,6 +1,6 @@
 # Offerta Builder
 
-Versione corrente: **0.6.0** — vedi [CHANGELOG.md](CHANGELOG.md).
+Versione corrente: **0.7.0** — vedi [CHANGELOG.md](CHANGELOG.md).
 
 Offer Builder **controllato**: importa le BOM dei distributori, applica le regole
 commerciali e genera l'offerta sul template Word aziendale.
@@ -45,6 +45,7 @@ invece di stimare.
 | QA Agent | `offerta_builder/qa.py` | segnaposto, date, titoli duplicati, quadrature, IVA, margini, condizioni |
 | Riepilogo interno | `offerta_builder/report.py` | HTML con costi, margini e anomalie, a uso interno |
 | Orchestratore | `offerta_builder/pipeline.py` | esegue il flusso e scrive gli output |
+| Rinnovo | `offerta_builder/rinnovo.py` | rilegge un'offerta scaduta e la riporta nel flusso |
 | Interfaccia web | `offerta_builder/web/` | upload, form, anteprima e download nel browser (stessa pipeline) |
 | Preparazione template | `scripts/prepara_template_ad.py` | inserisce i segnaposto in un modello AD che ne è privo |
 
@@ -82,6 +83,28 @@ backend. Le condizioni di vendita si scelgono da tendine con i valori più usati
 (con "Altro" per scriverne uno diverso), i totali e il margine restano aggiornati
 nel riepilogo laterale, e al termine trovi l'esito dei controlli QA con i file da
 scaricare.
+
+### Rinnovare un'offerta scaduta
+
+```
+Trascina la vecchia offerta nell'area "Rinnovo: offerta precedente"
+```
+
+Il documento viene riletto e riportato dentro il flusso: cliente, referente,
+P.IVA, oggetto, condizioni di vendita e **righe con i loro prezzi**. Il form si
+compila da solo, con:
+
+- **data offerta** di oggi e **validità** a N giorni (impostabile);
+- **riferimento** con la revisione incrementata (`_R00` → `_R01`);
+- **adeguamento prezzi %** opzionale, applicato ai prezzi ripresi.
+
+Da lì si lavora come sempre: righe modificabili, voci da aggiungere, e
+generazione sul template corrente — così una vecchia offerta si riallinea al
+modello nuovo.
+
+Il costo di acquisto non è scritto in offerta: finché non carichi una BOM
+aggiornata il **margine resta sconosciuto**, e sia il riepilogo sia il QA lo
+dicono invece di mostrare un 100% privo di senso.
 
 ### Semplificare l'offerta
 

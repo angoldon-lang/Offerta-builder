@@ -91,6 +91,7 @@ def policy_from_form(form: Dict[str, Any], overrides: Optional[Dict[str, Any]] =
         min_margin_percent=_dec(form.get("margine_minimo_percento"), Decimal("0")),
         rounding=str(pricing.get("rounding") or "0.01"),
         contract_years=int(form.get("durata_contratto_anni") or 1),
+        renewal_adjustment_percent=_dec(form.get("adeguamento_percent"), Decimal("0")),
     )
     for raw in pricing.get("overrides") or []:
         policy.overrides.append(

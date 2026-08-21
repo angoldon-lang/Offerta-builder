@@ -40,13 +40,26 @@
         <label class="drop" id="drop-template">
           <input type="file" id="input-template" accept=".docx" hidden>
           <strong>Template Word</strong>
-          <span>Trascina qui oppure clicca &middot; .docx con i segnaposto</span>
+          <span>Trascina qui oppure clicca &middot; il modello AD, anche senza segnaposto</span>
           <span class="tag" id="tag-template" hidden></span>
         </label>
+        <label class="drop" id="drop-vecchia">
+          <input type="file" id="input-vecchia" accept=".docx" hidden>
+          <strong>Rinnovo: offerta precedente</strong>
+          <span>Trascina un'offerta scaduta &middot; ne recupera dati, righe e condizioni</span>
+          <span class="tag" id="tag-vecchia" hidden></span>
+        </label>
+      </div>
+
+      <div class="riga-opzioni">
+        <label class="hint" for="rinnovo-giorni">Nel rinnovo la nuova offerta vale</label>
+        <input type="number" id="rinnovo-giorni" class="mini" value="30" min="1" max="365">
+        <span class="hint">giorni dalla data di oggi</span>
       </div>
 
       <div id="errori-upload" class="alert error" hidden></div>
       <div id="avvisi-upload" class="alert warn" hidden></div>
+      <div id="rinnovo-info" class="alert ok" hidden></div>
       <div id="elenco-bom" class="bom-list"></div>
     </section>
 

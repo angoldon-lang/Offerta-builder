@@ -32,6 +32,7 @@ from .money import format_percent, q2, q4
 MODE_MARKUP = "markup"
 MODE_TARGET_MARGIN = "target_margin"
 MODE_MANUAL = "manual"
+MODE_RINNOVO = "rinnovo"
 MODES = {MODE_MARKUP, MODE_TARGET_MARGIN, MODE_MANUAL}
 
 ROUNDING_STEPS = {
@@ -92,6 +93,8 @@ class PricingPolicy:
     min_margin_percent: Decimal = Decimal("30")
     rounding: str = "0.01"
     contract_years: int = 1
+    # Ritocco dei prezzi ripresi da un'offerta precedente (rinnovo).
+    renewal_adjustment_percent: Decimal = Decimal("0")
     overrides: List[LineOverride] = field(default_factory=list)
     line_edits: List[LineEdit] = field(default_factory=list)
     services: List[ServiceLine] = field(default_factory=list)
@@ -200,7 +203,15 @@ def _price_line(
     )
 
     sell_unit: Optional[Decimal] = None
-    if edit is not None and edit.sell_net_unit is not None:
+    if item.previous_price_total is not None and (edit is None or edit.sell_net_unit is None):
+        # Rinnovo: si parte dal prezzo dell'offerta precedente, con l'eventuale
+        # adeguamento deciso dall'operatore.
+        prezzo = item.previous_price_total * (
+            Decimal("100") + policy.renewal_adjustment_percent
+        ) / Decimal("100")
+        sell_unit = prezzo / qty if qty else prezzo
+        mode = MODE_RINNOVO
+    elif edit is not None and edit.sell_net_unit is not None:
         # Il prezzo scritto a mano sulla riga vince su qualunque politica.
         sell_unit = edit.sell_net_unit
         mode = MODE_MANUAL
@@ -252,12 +263,18 @@ def _price_line(
     item.vat_percent = q2(vat_percent)
     item.vat_total = q2(item.sell_net_total * vat_percent / Decimal("100"))
     item.sell_gross_total = q2(item.sell_net_total + item.vat_total)
-    item.margin_value = q2(item.sell_net_total - cost_total)
-    item.margin_percent = (
-        q4(item.margin_value / item.sell_net_total * Decimal("100"))
-        if item.sell_net_total
-        else Decimal("0")
-    )
+    if item.cost_net_total is None:
+        # Senza costo il margine non si può calcolare: meglio lasciarlo vuoto
+        # che scrivere 100%.
+        item.margin_value = None
+        item.margin_percent = None
+    else:
+        item.margin_value = q2(item.sell_net_total - cost_total)
+        item.margin_percent = (
+            q4(item.margin_value / item.sell_net_total * Decimal("100"))
+            if item.sell_net_total
+            else Decimal("0")
+        )
     return item
 
 
@@ -300,6 +317,9 @@ def _price_service(service: ServiceLine, policy: PricingPolicy, result: PricedOf
 
 def _totals(items: List[BomItem]) -> OfferTotals:
     totals = OfferTotals()
+    totals.rows_without_cost = sum(
+        1 for item in items if item.cost_net_total is None and item.sell_net_total
+    )
     for item in items:
         totals.total_list += item.list_price_total or Decimal("0")
         totals.total_cost += item.cost_net_total or Decimal("0")
@@ -310,10 +330,16 @@ def _totals(items: List[BomItem]) -> OfferTotals:
     totals.total_net = q2(totals.total_net)
     totals.total_vat = q2(totals.total_vat)
     totals.total_gross = q2(totals.total_net + totals.total_vat)
-    totals.margin_value = q2(totals.total_net - totals.total_cost)
-    totals.margin_percent = (
-        q4(totals.margin_value / totals.total_net * Decimal("100")) if totals.total_net else Decimal("0")
-    )
+    if totals.rows_without_cost:
+        # Costi ignoti (offerta rinnovata): un margine calcolato sui costi
+        # mancanti direbbe 100%, che è peggio di non dirlo.
+        totals.margin_value = Decimal("0")
+        totals.margin_percent = Decimal("0")
+    else:
+        totals.margin_value = q2(totals.total_net - totals.total_cost)
+        totals.margin_percent = (
+            q4(totals.margin_value / totals.total_net * Decimal("100")) if totals.total_net else Decimal("0")
+        )
     totals.average_discount_percent = (
         q4((Decimal("1") - totals.total_cost / totals.total_list) * Decimal("100"))
         if totals.total_list
@@ -385,8 +411,8 @@ def _annual_breakdown(items: List[BomItem], policy: PricingPolicy) -> List[Annua
 
 def _check_thresholds(result: PricedOffer, policy: PricingPolicy) -> None:
     threshold = policy.min_margin_percent
-    if threshold <= 0:
-        return
+    if threshold <= 0 or not result.totals.margin_known:
+        return  # senza costi il margine non è confrontabile con la soglia
     # Se e' l'intera offerta a stare sotto soglia basta dirlo una volta: elencare
     # anche tutte le righe seppellirebbe le altre segnalazioni.
     if result.totals.margin_percent < threshold:

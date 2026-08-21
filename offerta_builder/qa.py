@@ -208,6 +208,15 @@ def _check_validity_vs_bom(offer: PricedOffer, form: Dict[str, Any]) -> Check:
     if validita is None:
         return Check("qa.validita_bom", "Validità vs BOM", LEVEL_WARN,
                      "Validità offerta non interpretabile: confronto con la BOM non eseguito.")
+    if all(bom.distributor == "Offerta precedente" for bom in offer.boms) and offer.boms:
+        return Check(
+            "qa.validita_bom",
+            "Validità vs BOM",
+            LEVEL_WARN,
+            "Rinnovo da offerta precedente: non c'è una quotazione distributore da confrontare. "
+            "Verifica con il distributore che i prezzi siano ancora validi.",
+        )
+
     problems: List[str] = []
     checked = 0
     for bom in offer.boms:
@@ -279,6 +288,16 @@ def _check_vat(offer: PricedOffer, form: Dict[str, Any]) -> Check:
 
 
 def _check_margin(offer: PricedOffer, threshold: Decimal) -> Check:
+    if not offer.totals.margin_known:
+        return Check(
+            "qa.margine",
+            "Margine minimo",
+            LEVEL_WARN,
+            f"Margine non calcolabile: {offer.totals.rows_without_cost} righe senza costo di "
+            "acquisto (offerta rinnovata). Carica la BOM aggiornata per verificarlo.",
+            {"righe_senza_costo": offer.totals.rows_without_cost},
+        )
+
     margin = offer.totals.margin_percent
     if threshold <= 0:
         return Check("qa.margine", "Margine minimo", LEVEL_WARN,
@@ -348,23 +367,23 @@ def _check_document_totals(offer: PricedOffer, text: str) -> Check:
         return Check("qa.totale_documento", "Totale a documento", LEVEL_WARN, "Documento non analizzato.")
     from .money import format_eur
 
-    lordo = format_eur(offer.totals.total_gross, "EUR").split(" ")[0]
-    netto = format_eur(offer.totals.total_net, "EUR").split(" ")[0]
+    lordo = format_eur(offer.totals.total_gross).split(" ")[0]
+    netto = format_eur(offer.totals.total_net).split(" ")[0]
     normalized = re.sub(r"\s+", " ", text)
 
     if netto in normalized and lordo in normalized:
         return Check("qa.totale_documento", "Totale a documento", LEVEL_OK,
-                     f"Imponibile e totale IVA inclusa ({lordo} EUR) presenti nel documento.")
+                     f"Imponibile e totale IVA inclusa ({lordo} €) presenti nel documento.")
     if netto in normalized:
         # Molti modelli espongono solo l'imponibile: e' una scelta di formato,
         # purche' il numero stampato sia quello calcolato.
         return Check("qa.totale_documento", "Totale a documento", LEVEL_OK,
-                     f"Imponibile ({netto} EUR) presente nel documento; il totale IVA inclusa non è riportato.")
+                     f"Imponibile ({netto} €) presente nel documento; il totale IVA inclusa non è riportato.")
     return Check(
         "qa.totale_documento",
         "Totale a documento",
         LEVEL_FAIL,
-        f"Imponibile calcolato ({netto} EUR) non trovato nel documento generato: "
+        f"Imponibile calcolato ({netto} €) non trovato nel documento generato: "
         "verifica che il template abbia i segnaposto dei totali.",
         {"atteso_imponibile": netto, "atteso_totale": lordo},
     )

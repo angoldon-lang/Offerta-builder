@@ -12,6 +12,7 @@ const state = {
   boms: [],
   overrides: {},
   righe: {},
+  rinnovo: null,
   preview: null,
   inflight: null,
 };
@@ -188,6 +189,12 @@ function costruisciControlliPrezzo() {
 
   CAMPI_PREZZO.map(specDi).filter(Boolean).forEach((spec) => contenitore.appendChild(campoInput(spec)));
 
+  const adeguamento = el('input', { type: 'text', id: 'pricing-adeguamento', value: '0', oninput: pianificaAnteprima });
+  const boxAdeguamento = el('div', { class: 'campo', id: 'box-adeguamento', hidden: true },
+    el('label', { for: 'pricing-adeguamento', text: 'Adeguamento prezzi %' }), adeguamento,
+    el('span', { class: 'aiuto', text: 'sui prezzi ripresi dalla vecchia offerta' }));
+  contenitore.appendChild(boxAdeguamento);
+
   const estese = el('input', { type: 'checkbox', id: 'pricing-descrizioni', onchange: pianificaAnteprima });
   contenitore.appendChild(el('div', { class: 'campo' },
     el('label', { for: 'pricing-descrizioni', text: 'Descrizioni' }),
@@ -261,6 +268,7 @@ function raccogliForm() {
   };
   form.righe = Object.values(state.righe);
   form.descrizioni_estese = $('#pricing-descrizioni').checked;
+  form.adeguamento_percent = $('#pricing-adeguamento').value.trim() || '0';
   // Le voci aggiunte a mano vanno nel blocco scelto: materiali o servizi.
   const voci = raccogliServizi();
   form.servizi_aggiuntivi = voci.filter((v) => v.blocco !== 'prodotti');
@@ -336,6 +344,46 @@ async function caricaFile(files, campo) {
     errori.hidden = true;
   }
   applicaPrefill(risposta.prefill || {});
+  disegnaBoms();
+  pianificaAnteprima(0);
+}
+
+async function caricaOffertaPrecedente(files) {
+  if (!files || !files.length) return;
+  const dati = new FormData();
+  dati.append('session', state.session);
+  dati.append('offerta', files[0]);
+  dati.append('giorni_validita', ($('#rinnovo-giorni') || {}).value || '30');
+  toast('Lettura offerta precedente...');
+
+  const risposta = await api('/api/offerta-precedente', { method: 'POST', body: dati })
+    .catch((errore) => { toast(errore.message); return null; });
+  if (!risposta || risposta.stato !== 'ok') return;
+
+  state.session = risposta.session;
+  state.boms = risposta.boms;
+  state.righe = {};
+  state.rinnovo = risposta;
+  forzaRidisegnoRighe();
+  aggiornaContatoreModifiche();
+
+  const tag = $('#tag-vecchia');
+  tag.textContent = risposta.file;
+  tag.hidden = false;
+
+  // Nel rinnovo i dati della vecchia offerta vincono su quelli a video.
+  Object.entries(risposta.form || {}).forEach(([nome, valore]) => {
+    const controllo = document.querySelector(`[data-campo="${nome}"]`);
+    if (controllo && valore) impostaCampo(controllo, String(valore));
+  });
+
+  $('#box-adeguamento').hidden = false;
+  const info = $('#rinnovo-info');
+  info.textContent = `Rinnovo da "${risposta.file}": ${risposta.righe} righe recuperate, `
+    + `totale precedente ${risposta.totale_precedente || 'n/d'}. `
+    + 'Date e riferimento sono già aggiornati; il margine resta sconosciuto finché non carichi una BOM aggiornata.';
+  info.hidden = false;
+
   disegnaBoms();
   pianificaAnteprima(0);
 }
@@ -434,10 +482,17 @@ function disegnaTotali(totali) {
   $('#t-imponibile').textContent = totali.imponibile;
   $('#t-iva').textContent = totali.iva;
   $('#t-totale').textContent = totali.totale;
-  $('#t-margine').textContent = `${totali.margine} (${totali.margine_percento})`;
+  $('#t-margine').textContent = totali.margine_percento
+    ? `${totali.margine} (${totali.margine_percento})`
+    : totali.margine;
 
   const soglia = parseFloat(($('[data-campo="margine_minimo_percento"]').value || '0').replace(',', '.')) || 0;
   const barra = $('#barra-margine');
+  if (totali.margine_noto === false) {
+    barra.hidden = true;
+    $('#t-margine').textContent = totali.margine;
+    return;
+  }
   barra.hidden = false;
   barra.classList.toggle('sotto', soglia > 0 && totali.margine_valore < soglia);
   barra.querySelector('.fill').style.width = `${Math.max(0, Math.min(100, totali.margine_valore))}%`;
@@ -481,6 +536,12 @@ function aggiornaContatoreModifiche() {
   if (!pulsante) return;
   pulsante.hidden = quante === 0;
   pulsante.textContent = quante === 1 ? 'Azzera 1 modifica di riga' : `Azzera ${quante} modifiche di riga`;
+}
+
+function testoMargine(riga) {
+  if (riga.esclusa) return '-';
+  if (!riga.margine_percento) return 'n/d';
+  return `${riga.margine} (${riga.margine_percento})`;
 }
 
 function prezzoModificabile(riga) {
@@ -532,10 +593,7 @@ function disegnaRighe(righe) {
       cellaTesto(riga, 'prezzo_unitario', prezzoModificabile(riga), 'c-prezzo prezzo num'),
       el('span', { class: 'manuale', text: riga.modificata ? 'modificata' : '' })));
     tr.appendChild(el('td', { class: 'num totale', text: riga.esclusa ? 'esclusa' : riga.totale }));
-    tr.appendChild(el('td', {
-      class: 'num margine',
-      text: riga.esclusa ? '-' : `${riga.margine} (${riga.margine_percento})`,
-    }));
+    tr.appendChild(el('td', { class: 'num margine', text: testoMargine(riga) }));
 
     const azioni = el('td', { class: 'azioni' });
     if (riga.esclusa) {
@@ -569,11 +627,14 @@ function aggiornaCelleRighe(righe) {
     tr.querySelector('.numero').textContent = riga.esclusa ? '-' : String(riga.numero);
     tr.querySelector('.costo').textContent = riga.costo;
     tr.querySelector('.totale').textContent = riga.esclusa ? 'esclusa' : riga.totale;
-    tr.querySelector('.margine').textContent = riga.esclusa ? '-' : `${riga.margine} (${riga.margine_percento})`;
+    tr.querySelector('.margine').textContent = testoMargine(riga);
     const manuale = tr.querySelector('.manuale');
     if (manuale) manuale.textContent = riga.modificata ? 'modificata' : '';
 
-    const sottoSoglia = !riga.esclusa && soglia > 0 && riga.margine_valore < soglia && riga.modalita !== 'servizio';
+    // Senza costo il margine non si conosce: inutile colorare la riga di rosso.
+    const margineNoto = Boolean(riga.margine_percento);
+    const sottoSoglia = margineNoto && !riga.esclusa && soglia > 0
+      && riga.margine_valore < soglia && riga.modalita !== 'servizio';
     tr.classList.toggle('sotto-soglia', sottoSoglia);
 
     // I campi che l'utente sta compilando non vengono toccati.
@@ -700,6 +761,18 @@ function collegaDropzone(zona, input, campo) {
   nodo.addEventListener('drop', (ev) => caricaFile(ev.dataTransfer.files, campo));
 }
 
+function collegaDropzoneRinnovo() {
+  const nodo = $('#drop-vecchia');
+  const controllo = $('#input-vecchia');
+  nodo.addEventListener('click', (ev) => { if (ev.target !== controllo) controllo.click(); });
+  controllo.addEventListener('change', () => caricaOffertaPrecedente(controllo.files));
+  ['dragenter', 'dragover'].forEach((evento) =>
+    nodo.addEventListener(evento, (ev) => { ev.preventDefault(); nodo.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((evento) =>
+    nodo.addEventListener(evento, (ev) => { ev.preventDefault(); nodo.classList.remove('over'); }));
+  nodo.addEventListener('drop', (ev) => caricaOffertaPrecedente(ev.dataTransfer.files));
+}
+
 async function init() {
   state.schema = await api('/api/schema');
   costruisciForm();
@@ -719,6 +792,7 @@ async function init() {
 
   collegaDropzone('#drop-bom', '#input-bom', 'bom');
   collegaDropzone('#drop-template', '#input-template', 'template');
+  collegaDropzoneRinnovo();
   $('#btn-aggiungi-servizio').addEventListener('click', () => { $('#servizi').appendChild(rigaServizio()); });
   $('#btn-azzera-righe').addEventListener('click', () => {
     state.righe = {};
@@ -739,8 +813,12 @@ async function init() {
     state.boms = [];
     state.overrides = {};
     state.righe = {};
+    state.rinnovo = null;
     forzaRidisegnoRighe();
     aggiornaContatoreModifiche();
+    $('#tag-vecchia').hidden = true;
+    $('#rinnovo-info').hidden = true;
+    $('#box-adeguamento').hidden = true;
     disegnaBoms();
     disegnaRighe([]);
     $('#esito').hidden = true;

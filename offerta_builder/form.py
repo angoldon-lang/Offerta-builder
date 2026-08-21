@@ -86,6 +86,8 @@ FIELDS: List[FieldSpec] = [
     FieldSpec("email_referente", "Email referente", example="serena.piantoni@cliente.it"),
     FieldSpec("servizi_aggiuntivi", "Servizi aggiuntivi", kind=KIND_LIST,
               help="Elenco di oggetti {descrizione, quantita, prezzo_unitario, costo_unitario}"),
+    FieldSpec("adeguamento_percent", "Adeguamento prezzi %", kind=KIND_DECIMAL,
+              example="3", help="Ritocco sui prezzi ripresi da un'offerta precedente"),
     FieldSpec("righe_aggiuntive", "Righe libere in offerta", kind=KIND_LIST,
               help="Voci da aggiungere fra i materiali; il prezzo può essere un testo (es. Incluso)"),
     FieldSpec("requisiti_cliente", "Requisiti a carico del cliente", kind=KIND_LIST),

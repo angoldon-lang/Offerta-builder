@@ -80,6 +80,9 @@ class BomItem:
     # Testo da stampare al posto dell'importo (es. "Incluso"): vale zero nei
     # totali, ma in offerta si legge come l'ha scritto l'operatore.
     display_price: str = ""
+    # Prezzo al cliente ripreso da un'offerta precedente (rinnovo): non c'è il
+    # costo di acquisto, quindi il margine resta sconosciuto.
+    previous_price_total: Optional[Decimal] = None
 
     def key(self) -> str:
         return self.sku or self.description[:60]
@@ -160,6 +163,13 @@ class OfferTotals:
     margin_value: Decimal = Decimal("0")
     margin_percent: Decimal = Decimal("0")
     average_discount_percent: Decimal = Decimal("0")
+    # Righe di cui non si conosce il costo (tipico delle offerte rinnovate):
+    # finché ce ne sono, il margine complessivo non è significativo.
+    rows_without_cost: int = 0
+
+    @property
+    def margin_known(self) -> bool:
+        return self.rows_without_cost == 0
 
     def to_dict(self) -> Dict[str, Any]:
         return _json_safe(asdict(self))

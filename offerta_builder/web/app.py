@@ -33,6 +33,7 @@ from ..form import FIELDS, blank_form, prefill_from_bom
 from ..models import NormalizedBom
 from ..money import format_eur, format_number, format_percent
 from ..pipeline import BlockingError, build_offer, prepare_offer
+from ..rinnovo import aggiorna_per_rinnovo, bom_da_offerta, read_offer
 from ..pricing import MODES, ROUNDING_STEPS
 
 TEMPLATE_EXTENSIONS = {".docx"}
@@ -51,6 +52,7 @@ class Session:
     template_path: str = ""
     template_name: str = ""
     template_ok: bool = True
+    offerta_precedente: str = ""
     outputs: Dict[str, str] = field(default_factory=dict)
     touched_at: float = field(default_factory=time.time)
 
@@ -209,6 +211,51 @@ def create_app(work_root: Optional[str] = None) -> Flask:
                 "prefill": _prefill(session.boms),
                 "errori": errors,
                 "avvisi": avvisi,
+            }
+        )
+
+    @app.post("/api/offerta-precedente")
+    def offerta_precedente():
+        """Rilegge un'offerta scaduta e la riporta nel flusso come punto di partenza."""
+        session_id = request.form.get("session", "")
+        session = store.get(session_id) or store.create()
+        errors: List[str] = []
+
+        caricato = request.files.get("offerta")
+        if not caricato or not caricato.filename:
+            return jsonify({"stato": "errore", "messaggio": "Nessun documento caricato."}), 400
+
+        percorso = _save_upload(caricato, session.input_dir, TEMPLATE_EXTENSIONS, errors)
+        if not percorso:
+            return jsonify({"stato": "errore", "messaggio": " ".join(errors)}), 400
+
+        try:
+            importata = read_offer(percorso)
+        except Exception as exc:  # documento illeggibile
+            return jsonify({"stato": "errore", "messaggio": f"Documento non leggibile: {exc}"}), 400
+
+        try:
+            giorni = int(request.form.get("giorni_validita") or 30)
+        except ValueError:
+            giorni = 30
+
+        session.offerta_precedente = os.path.basename(percorso)
+        # Le righe della vecchia offerta prendono il posto delle BOM: i prezzi
+        # sono già quelli al cliente.
+        session.boms = [bom_da_offerta(importata)]
+        session.bom_files = [{"nome": session.offerta_precedente, "percorso": percorso}]
+
+        return jsonify(
+            {
+                "stato": "ok",
+                "session": session.id,
+                "file": session.offerta_precedente,
+                "form": aggiorna_per_rinnovo(importata, giorni_validita=giorni),
+                "form_originale": importata.form,
+                "righe": len(importata.righe),
+                "totale_precedente": format_eur(importata.totale) if importata.totale is not None else "",
+                "anomalie": [i.to_dict() for i in importata.issues],
+                "boms": [_bom_payload(bom) for bom in session.boms],
             }
         )
 
@@ -392,8 +439,8 @@ def _bom_payload(bom: NormalizedBom) -> Dict[str, Any]:
         # mai copiate nelle condizioni verso il cliente.
         "pagamento_distributore": bom.meta.get("payment_terms", ""),
         "righe": len(bom.items),
-        "costo": format_eur(bom.total_cost()),
-        "listino": format_eur(bom.total_list()),
+        "costo": format_eur(bom.total_cost()) if bom.total_cost() else "costo non noto",
+        "listino": format_eur(bom.total_list()) if bom.total_list() else "",
         "anomalie": [i.to_dict() for i in bom.issues],
         "articoli": [
             {
@@ -424,9 +471,11 @@ def _totals_payload(offer) -> Dict[str, Any]:
         "imponibile": format_eur(totals.total_net),
         "iva": format_eur(totals.total_vat),
         "totale": format_eur(totals.total_gross),
-        "margine": format_eur(totals.margin_value),
-        "margine_percento": format_percent(totals.margin_percent),
+        "margine": format_eur(totals.margin_value) if totals.margin_known else "non calcolabile",
+        "margine_percento": format_percent(totals.margin_percent) if totals.margin_known else "",
         "margine_valore": float(totals.margin_percent),
+        "margine_noto": totals.margin_known,
+        "righe_senza_costo": totals.rows_without_cost,
         "sconto_medio": format_percent(totals.average_discount_percent),
         "righe": len(offer.items),
     }
@@ -455,14 +504,14 @@ def _line_payload(item, esclusa: bool = False) -> Dict[str, Any]:
         "periodo": item.period,
         "quantita": format_number(item.quantity),
         "quantita_valore": str(item.quantity),
-        "costo": format_eur(item.cost_net_total),
-        "costo_unitario": format_eur(item.cost_net_unit),
+        "costo": format_eur(item.cost_net_total) if item.cost_net_total is not None else "n/d",
+        "costo_unitario": format_eur(item.cost_net_unit) if item.cost_net_unit is not None else "n/d",
         # Una voce "Incluso" mostra il testo, non lo zero.
         "prezzo_unitario": item.display_price or format_eur(item.sell_net_unit),
         "prezzo_unitario_valore": float(item.sell_net_unit or Decimal("0")),
         "totale": item.display_price or format_eur(item.sell_net_total),
-        "margine": format_eur(item.margin_value),
-        "margine_percento": format_percent(item.margin_percent),
+        "margine": format_eur(item.margin_value) if item.margin_value is not None else "n/d",
+        "margine_percento": format_percent(item.margin_percent) if item.margin_percent is not None else "",
         "margine_valore": float(item.margin_percent or Decimal("0")),
         "modalita": item.pricing_mode,
     }

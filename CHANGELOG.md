@@ -4,6 +4,22 @@ Il numero di versione si legge con `offerta --version` o in alto a destra
 nell'interfaccia web. Se dopo un `git pull` il numero non cambia, l'aggiornamento
 non è arrivato.
 
+## 0.7.0
+
+**Rinnovo di un'offerta scaduta.** Si carica la vecchia offerta e il programma
+ne recupera dati, condizioni e righe con i prezzi, aggiorna date e revisione del
+riferimento, applica un eventuale adeguamento percentuale e rigenera tutto sul
+template corrente.
+
+- lettura di offerte prodotte dal programma o scritte a mano in Word
+  (copertina in caselle di testo o in tabella, colonne riconosciute
+  dall'intestazione);
+- le voci "Incluso" restano tali;
+- senza costi di acquisto il margine non viene inventato: risulta "non
+  calcolabile" nel riepilogo, nel QA e nel documento interno;
+- il QA ricorda che nel rinnovo non c'è una quotazione distributore con cui
+  confrontare validità e prezzi.
+
 ## 0.6.0
 
 **Semplificare l'offerta.** La proposta calcolata dalla BOM è un punto di

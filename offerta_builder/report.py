@@ -124,7 +124,11 @@ generato il {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
   <div class="card"><div class="label">Imponibile vendita</div><div class="value">{format_eur(totals.total_net)}</div></div>
   <div class="card"><div class="label">IVA</div><div class="value">{format_eur(totals.total_vat)}</div></div>
   <div class="card"><div class="label">Totale con IVA</div><div class="value">{format_eur(totals.total_gross)}</div></div>
-  <div class="card"><div class="label">Margine</div><div class="value">{format_eur(totals.margin_value)} ({format_percent(totals.margin_percent)})</div></div>
+  <div class="card"><div class="label">Margine</div><div class="value">{
+      (format_eur(totals.margin_value) + " (" + format_percent(totals.margin_percent) + ")")
+      if totals.margin_known else
+      "non calcolabile: " + str(totals.rows_without_cost) + " righe senza costo"
+  }</div></div>
   <div class="card"><div class="label">Esito QA</div><div class="value"><span class="badge {qa.status}">{_label(qa.status)}</span></div></div>
 </div>
 
