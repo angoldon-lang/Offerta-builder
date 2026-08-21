@@ -234,3 +234,19 @@ def test_margine_sotto_soglia_non_blocca_la_generazione(client, csv_bom_path, fo
     assert dati["stato"] == "ok"
     assert dati["qa"]["status"] == "warn"
     assert any(file["chiave"] == "docx" for file in dati["file"])
+
+
+def test_versione_esposta_e_allineata(client):
+    """La versione mostrata deve essere quella del pacchetto installato."""
+    import tomllib
+
+    from offerta_builder import __version__
+
+    assert client.get("/api/schema").get_json()["versione"] == __version__
+    assert f"v{__version__}".encode() in client.get("/").data
+
+    percorso = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "pyproject.toml"
+    )
+    with open(percorso, "rb") as handle:
+        assert tomllib.load(handle)["project"]["version"] == __version__

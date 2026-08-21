@@ -82,7 +82,7 @@ Quando l'ambiente è attivo, il prompt inizia con `(.venv)`.
 offerta --version
 ```
 
-Deve rispondere `offerta-builder 0.1.0`.
+Deve rispondere con la versione installata, per esempio `offerta-builder 0.5.0`.
 
 ---
 
@@ -247,6 +247,10 @@ Dopo l'aggiornamento **ricarica la pagina nel browser** (Ctrl+F5): il file
 JavaScript viene messo in cache, e senza ricarica forzata continueresti a usare
 la versione precedente dell'interfaccia.
 
+Per sapere quale versione stai usando: `offerta --version` da terminale, oppure
+il numero in alto a destra nell'interfaccia. Se dopo il `git pull` il numero non
+cambia, l'aggiornamento non è arrivato (o la pagina è ancora quella in cache).
+
 Se `git pull` si lamenta di modifiche locali che non ricordi di aver fatto:
 
 ```bash
@@ -265,7 +269,7 @@ pip install pytest
 python -m pytest
 ```
 
-Attesi: **140 test verdi**.
+Attesi: **141 test verdi**.
 
 ---
 

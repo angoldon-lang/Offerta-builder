@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from flask import Flask, jsonify, render_template, request, send_file
 
+from .. import __version__
 from ..bom import normalize
 from ..bom.reader import SUPPORTED_EXTENSIONS
 from ..docx_builder import has_placeholders
@@ -119,7 +120,7 @@ def create_app(work_root: Optional[str] = None) -> Flask:
     # ---------------------------------------------------------------- pagina
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", versione=__version__)
 
     # ---------------------------------------------------------------- schema
     @app.get("/api/schema")
@@ -146,6 +147,7 @@ def create_app(work_root: Optional[str] = None) -> Flask:
                 "estensioni_bom": sorted(SUPPORTED_EXTENSIONS),
                 "estensioni_template": sorted(TEMPLATE_EXTENSIONS),
                 "oggi": date.today().strftime("%d/%m/%Y"),
+                "versione": __version__,
             }
         )
 

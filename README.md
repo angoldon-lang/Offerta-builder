@@ -1,5 +1,7 @@
 # Offerta Builder
 
+Versione corrente: **0.5.0** — vedi [CHANGELOG.md](CHANGELOG.md).
+
 Offer Builder **controllato**: importa le BOM dei distributori, applica le regole
 commerciali e genera l'offerta sul template Word aziendale.
 
