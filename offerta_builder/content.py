@@ -15,7 +15,7 @@ from typing import Any, Dict, Iterable, List, Set
 
 from .dates import to_it
 from .models import SEVERITY_WARNING, Issue, PricedOffer
-from .money import format_eur
+from .money import format_eur, format_number
 
 REQUISITI_STANDARD = [
     "Disponibilità di un referente tecnico del Cliente per tutta la durata delle attività.",
@@ -48,6 +48,7 @@ def build_content(offer: PricedOffer, form: Dict[str, Any]) -> Dict[str, Any]:
         "oggetto": oggetto,
         "premessa": str(form.get("premessa", "")).strip() or _premessa(cliente, oggetto, vendor, durata, form),
         "descrizione_fornitura": _descrizione_fornitura(offer, vendor),
+        "voci_oggetto": _voci_oggetto(offer),
         "descrizione_servizi": _descrizione_servizi(offer, form),
         "nota_servizi": _nota_servizi(offer),
         # Se il campo c'è ma è vuoto, l'utente ha scelto di non metterli: la
@@ -115,6 +116,35 @@ def _descrizione_fornitura(offer: PricedOffer, vendor: str) -> str:
     )
 
 
+def _voci_oggetto(offer: PricedOffer) -> List[str]:
+    """Elenco puntato del capitolo Oggetto: una voce per prodotto, con quantità.
+
+    Il modello AD introduce la fornitura con "...i seguenti prodotti e
+    servizi:" e si aspetta l'elenco subito sotto. Le righe di sola nota (il
+    dettaglio del rinnovo, le clausole) restano dov'è il loro posto, cioè
+    nell'offerta economica.
+    """
+    voci: List[str] = []
+    for item in offer.items:
+        if item.is_note:
+            continue
+        descrizione = (item.description or "").strip()
+        if not descrizione:
+            continue
+        sku = (item.sku or "").strip()
+        if sku and sku.lower() not in descrizione.lower():
+            descrizione = f"{descrizione} ({sku})"
+        voci.append(f"{descrizione} - quantità {_quantita(item.quantity)}")
+    return voci
+
+
+def _quantita(valore: Any) -> str:
+    if valore is None:
+        return ""
+    decimali = 0 if valore == valore.to_integral_value() else 2
+    return format_number(valore, decimali)
+
+
 def _descrizione_servizi(offer: PricedOffer, form: Dict[str, Any]) -> List[str]:
     servizi = [item for item in offer.items if item.pricing_mode == "servizio"]
     righe = []
@@ -122,6 +152,17 @@ def _descrizione_servizi(offer: PricedOffer, form: Dict[str, Any]) -> List[str]:
         prezzo = format_eur(servizio.sell_net_total, "EUR")
         righe.append(f"{servizio.description} - {prezzo} (IVA esclusa)")
     return righe
+
+
+def _durata(anni: Any) -> str:
+    """"1 anno", "3 anni": al singolare quando è uno solo."""
+    if anni in (None, ""):
+        return ""
+    try:
+        numero = int(anni)
+    except (TypeError, ValueError):
+        return str(anni)
+    return f"{numero} anno" if numero == 1 else f"{numero} anni"
 
 
 def _nota_servizi(offer: PricedOffer) -> str:
@@ -139,7 +180,7 @@ def _condizioni(form: Dict[str, Any]) -> Dict[str, str]:
         "tipologia_pagamento": str(form.get("tipologia_pagamento", "")).strip(),
         "condizioni_pagamento": str(form.get("condizioni_pagamento", "")).strip(),
         "fatturazione": str(form.get("fatturazione", "")).strip(),
-        "durata_contratto": f"{form.get('durata_contratto_anni', '')} anni".strip(),
+        "durata_contratto": _durata(form.get("durata_contratto_anni")),
         "rinnovo": str(form.get("rinnovo", "")).strip(),
         "validita_offerta": to_it(validita) if validita else "",
     }

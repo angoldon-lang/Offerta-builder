@@ -250,3 +250,36 @@ def test_versione_esposta_e_allineata(client):
     )
     with open(percorso, "rb") as handle:
         assert tomllib.load(handle)["project"]["version"] == __version__
+
+
+def test_il_docx_si_scarica_col_nome_di_protocollo(client, csv_bom_path, form_data):
+    """Chi scarica deve ritrovare OFF_ADC_..., non un generico offerta.docx."""
+    session = carica_bom(client, csv_bom_path).get_json()["session"]
+    dati = client.post("/api/genera", json={"session": session, "form": form_data}).get_json()
+    nomi = {f["chiave"]: f["nome"] for f in dati["file"]}
+    assert nomi["docx"] == "OFF_ADC_26_0313_R03_Fornitura_Soluzione_SolarWinds.docx"
+    assert nomi["bom"] == "bom_normalizzata.json"   # materiale interno: nome invariato
+
+    risposta = client.get(f"/download/{session}/docx")
+    assert risposta.status_code == 200
+    assert "OFF_ADC_26_0313_R03_Fornitura_Soluzione_SolarWinds.docx" in (
+        risposta.headers["Content-Disposition"]
+    )
+
+
+def test_ogni_campo_del_form_compare_nell_interfaccia(client):
+    """Un campo nello schema ma non in GRUPPI resterebbe invisibile e inutile."""
+    import re
+
+    sorgente = client.get("/static/app.js").data.decode("utf-8")
+    nel_form = set(re.findall(r"'([a-z_]+)'", "\n".join(
+        re.findall(r"campi: \[(.*?)\]", sorgente)
+    )))
+    saltati = set(re.findall(r"'([a-z_]+)'", re.search(
+        r"CAMPI_SALTATI = \[(.*?)\]", sorgente).group(1)))
+    prezzo = set(re.findall(r"'([a-z_]+)'", re.search(
+        r"CAMPI_PREZZO = \[(.*?)\]", sorgente).group(1)))
+
+    schema = {campo["nome"] for campo in client.get("/api/schema").get_json()["campi"]}
+    mancanti = schema - nel_form - saltati - prezzo
+    assert not mancanti, f"campi senza posto nell'interfaccia: {sorted(mancanti)}"

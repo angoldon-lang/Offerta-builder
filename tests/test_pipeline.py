@@ -467,3 +467,58 @@ def test_nota_che_comincia_per_rinnovo_non_e_una_condizione(tmp_path, csv_bom_pa
     assert nota.cells[1].text.strip() == ""
     condizioni = {r.cells[0].text.strip().lower(): r.cells[1].text.strip() for r in documento.tables[1].rows}
     assert condizioni["rinnovo"] == "da concordare"
+
+
+def _modello_senza_segnaposto(percorso):
+    """Modello che annuncia l'elenco dei prodotti ma non lascia il segnaposto."""
+    from docx import Document
+
+    documento = Document()
+    documento.add_paragraph("Allegato A: Contratto.", style="List Bullet")
+    documento.add_heading("Oggetto", level=1)
+    documento.add_paragraph(
+        "Abbiamo il piacere di sottoporLe la nostra miglior offerta relativa alla "
+        "fornitura dei seguenti prodotti e servizi:"
+    )
+    documento.add_paragraph("")
+    documento.add_heading("Offerta Economica", level=1)
+    tabella = documento.add_table(rows=2, cols=3)
+    tabella.style = "Table Grid"
+    for indice, testo in enumerate(["Descrizione", "Quantità", "Importo"]):
+        tabella.rows[0].cells[indice].text = testo
+    tabella.rows[1].cells[0].text = "Netto a Voi Riservato"
+    documento.save(percorso)
+    return percorso
+
+
+def test_elenco_prodotti_aggiunto_sotto_oggetto(tmp_path, csv_bom_path, form_data):
+    """Il capitolo annuncia un elenco: senza segnaposto va costruito comunque."""
+    from docx import Document
+
+    from offerta_builder.template_word import _e_punto_elenco
+
+    template = _modello_senza_segnaposto(str(tmp_path / "modello.docx"))
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    paragrafi = Document(result.outputs["docx"]).paragraphs
+    inizio = next(i for i, p in enumerate(paragrafi) if p.text.strip() == "Oggetto")
+    voci = [p for p in paragrafi[inizio:] if "quantità" in p.text]
+    assert voci, "l'elenco dei prodotti manca sotto il capitolo Oggetto"
+    assert all(_e_punto_elenco(p) for p in voci)          # con il pallino, non testo sciolto
+    assert "SolarWinds" in voci[0].text
+    assert "2078005" in " ".join(p.text for p in voci)   # il codice resta leggibile
+
+
+def test_elenco_prodotti_non_si_duplica_sul_segnaposto(tmp_path, csv_bom_path, form_data):
+    """Col segnaposto l'elenco si scrive una volta sola, non due."""
+    from offerta_builder.docx_builder import extract_text
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    testo = extract_text(result.outputs["docx"])
+    assert testo.count("(2078005) - quantità") == 1

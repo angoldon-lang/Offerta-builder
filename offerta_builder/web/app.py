@@ -32,7 +32,7 @@ from ..content import ESCLUSIONI_STANDARD, REQUISITI_STANDARD
 from ..form import FIELDS, blank_form, prefill_from_bom
 from ..models import NormalizedBom
 from ..money import format_eur, format_number, format_percent
-from ..pipeline import BlockingError, build_offer, prepare_offer
+from ..pipeline import BlockingError, build_offer, nome_file_offerta, prepare_offer
 from ..rinnovo import FORMATI_SUPPORTATI, aggiorna_per_rinnovo, bom_da_offerta, read_offer
 from ..pricing import MODES, ROUNDING_STEPS
 
@@ -54,6 +54,7 @@ class Session:
     template_ok: bool = True
     offerta_precedente: str = ""
     outputs: Dict[str, str] = field(default_factory=dict)
+    nome_base: str = ""
     touched_at: float = field(default_factory=time.time)
 
     @property
@@ -63,6 +64,19 @@ class Session:
     @property
     def output_dir(self) -> str:
         return os.path.join(self.directory, "out")
+
+
+def _nome_scaricato(session: "Session", percorso: str) -> str:
+    """Nome del file per chi scarica: l'offerta prende il nome di protocollo.
+
+    Gli allegati di servizio (BOM normalizzata, QA, riepilogo) restano con il
+    loro nome: sono materiale interno, non vanno al cliente.
+    """
+    nome = os.path.basename(percorso)
+    radice, estensione = os.path.splitext(nome)
+    if session.nome_base and radice == "offerta":
+        return session.nome_base + estensione
+    return nome
 
 
 class SessionStore:
@@ -358,6 +372,7 @@ def create_app(work_root: Optional[str] = None) -> Flask:
             )
 
         session.outputs = dict(result.outputs)
+        session.nome_base = os.path.splitext(nome_file_offerta(payload.get("form") or {}))[0]
         return jsonify(
             {
                 "stato": "ok",
@@ -367,7 +382,7 @@ def create_app(work_root: Optional[str] = None) -> Flask:
                 "file": [
                     {
                         "chiave": chiave,
-                        "nome": os.path.basename(percorso),
+                        "nome": _nome_scaricato(session, percorso),
                         "byte": os.path.getsize(percorso) if os.path.exists(percorso) else 0,
                         "url": f"/download/{session.id}/{chiave}",
                     }
@@ -386,12 +401,15 @@ def create_app(work_root: Optional[str] = None) -> Flask:
             with zipfile.ZipFile(archivio, "w", zipfile.ZIP_DEFLATED) as zf:
                 for percorso in session.outputs.values():
                     if os.path.exists(percorso):
-                        zf.write(percorso, os.path.basename(percorso))
-            return send_file(archivio, as_attachment=True, download_name="offerta.zip")
+                        zf.write(percorso, _nome_scaricato(session, percorso))
+            nome_zip = f"{session.nome_base}.zip" if session.nome_base else "offerta.zip"
+            return send_file(archivio, as_attachment=True, download_name=nome_zip)
         percorso = session.outputs.get(chiave)
         if not percorso or not os.path.exists(percorso):
             return jsonify({"errore": "File non disponibile: rigenera l'offerta."}), 404
-        return send_file(percorso, as_attachment=True, download_name=os.path.basename(percorso))
+        return send_file(
+            percorso, as_attachment=True, download_name=_nome_scaricato(session, percorso)
+        )
 
     # ----------------------------------------------------------------- reset
     @app.post("/api/nuova")

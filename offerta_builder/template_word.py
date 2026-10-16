@@ -33,6 +33,8 @@ ETICHETTE_COPERTINA = [
 ]
 TESTO_DATA_VUOTA = "fare clic o toccare qui per immettere una data"
 SOLO_DATA = re.compile(r"^\s*\d{1,2}/\d{1,2}/\d{2,4}\s*$")
+# Una data ovunque nella riga: "Modena - 15/10/2026", a volte ripetuta.
+DATA_IN_RIGA = re.compile(r"\d{1,2}/\d{1,2}/\d{2,4}")
 RIEMPITIVO = re.compile(r"[_\s]{3,}$")
 
 # --- condizioni di vendita: etichetta di riga -> campo ----------------------
@@ -135,12 +137,16 @@ def fill_document(template_path: str, context: Dict[str, Any], output_path: str)
 
     if _compila_copertina(documento, context):
         fatti.append("copertina")
+    if _ripara_titoli(documento):
+        fatti.append("titoli riparati")
     if _compila_tabella_economica(documento, context):
         fatti.append("offerta economica")
     if _compila_condizioni(documento, context):
         fatti.append("condizioni di vendita")
     if _compila_paragrafi(documento, context):
         fatti.append("oggetto, premessa, requisiti ed esclusioni")
+    if _elenco_oggetto(documento, context):
+        fatti.append("elenco prodotti nell'oggetto")
 
     _aggiorna_sommario(documento)
     documento.save(output_path)
@@ -204,44 +210,101 @@ def _elimina_riga(riga) -> None:
 # Copertina (caselle di testo)
 # ---------------------------------------------------------------------------
 
-def _paragrafi_caselle(documento):
+def _caselle(documento):
+    """Caselle di testo del documento, ognuna con i suoi paragrafi in ordine."""
     from docx.text.paragraph import Paragraph
 
     for casella in documento.element.body.iter(f"{W_NS}txbxContent"):
-        for elemento in casella.iter(f"{W_NS}p"):
-            yield Paragraph(elemento, documento)
+        yield [Paragraph(elemento, documento) for elemento in casella.iter(f"{W_NS}p")]
+
+
+def _paragrafi_caselle(documento):
+    for paragrafi in _caselle(documento):
+        for paragrafo in paragrafi:
+            yield paragrafo
+
+
+def _e_etichetta(testo: str) -> bool:
+    spoglio = testo.strip().lower()
+    return any(spoglio.startswith(etichetta) for etichetta, _ in ETICHETTE_COPERTINA)
 
 
 def _compila_copertina(documento, context: Dict[str, Any]) -> bool:
+    """Scrive i dati in copertina, sostituendo quelli eventualmente presenti.
+
+    Nel modello AD l'etichetta e il suo valore possono stare su due paragrafi
+    diversi ("Spett.le" e sotto la ragione sociale): il valore vecchio va
+    sostituito, non affiancato al nuovo.
+    """
     scritto = False
-    data_fatta = False
-    for paragrafo in _paragrafi_caselle(documento):
-        for run in paragrafo.runs:
-            testo = run.text
-            spoglio = testo.strip().lower()
-            if not spoglio:
-                continue
+    for paragrafi in _caselle(documento):
+        pieni = [p for p in paragrafi if p.text.strip()]
+        for posizione, paragrafo in enumerate(pieni):
+            testo = paragrafo.text.strip()
+            spoglio = testo.lower()
 
             if spoglio.startswith(TESTO_DATA_VUOTA):
-                run.text = str(context.get("validita_offerta", ""))
+                _scrivi(paragrafo, str(context.get("validita_offerta", "")))
                 scritto = True
                 continue
-            if SOLO_DATA.match(testo) and not data_fatta:
-                run.text = str(context.get("data_offerta", "")) or testo
-                data_fatta = scritto = True
-                continue
+
+            # "Modena - 15/10/2026" (a volte con la data ripetuta due volte)
+            nuova_data = str(context.get("data_offerta", "")).strip()
+            if nuova_data and DATA_IN_RIGA.search(testo):
+                ripulito = DATA_IN_RIGA.sub("", testo).strip()
+                if not _e_etichetta(testo) or spoglio.startswith("modena"):
+                    _scrivi(paragrafo, f"{ripulito} {nuova_data}".strip())
+                    scritto = True
+                    continue
 
             for etichetta, campo in ETICHETTE_COPERTINA:
                 valore = str(context.get(campo, "")).strip()
                 if not valore or not spoglio.startswith(etichetta):
                     continue
-                coda = testo.strip()[len(etichetta):]
-                if coda.strip() and not RIEMPITIVO.match(coda):
-                    break  # la riga contiene già un valore: non si tocca
-                run.text = f"{testo.strip()[:len(etichetta)]} {valore}"
+                resto = testo[len(etichetta):].strip(" :_\t")
+                if resto:
+                    # etichetta e valore sulla stessa riga: si riscrive il valore
+                    _scrivi(paragrafo, f"{testo[:len(etichetta)].strip()} {valore}")
+                elif posizione + 1 < len(pieni) and not _e_etichetta(pieni[posizione + 1].text):
+                    # il valore sta nel paragrafo sotto
+                    _scrivi(pieni[posizione + 1], valore)
+                else:
+                    _scrivi(paragrafo, f"{testo.strip()} {valore}")
                 scritto = True
                 break
     return scritto
+
+
+def _ripara_titoli(documento) -> bool:
+    """Ricompone i titoli finiti doppi ("PremessaPremessa").
+
+    Capita quando un documento viene compilato aggiungendo un run invece di
+    riscrivere quello che c'è: il titolo risulta scritto due volte di fila.
+    """
+    riparati = False
+    paragrafi = list(documento.paragraphs)
+    for indice, paragrafo in enumerate(paragrafi):
+        stile = (paragrafo.style.name if paragrafo.style is not None else "").lower()
+        if not stile.startswith(("heading", "titolo")):
+            continue
+
+        testi = [run.text.strip() for run in paragrafo.runs if run.text.strip()]
+        if len(testi) >= 2 and all(t.lower() == testi[0].lower() for t in testi[1:]):
+            _scrivi(paragrafo, testi[0])
+            riparati = True
+
+        # Titolo ripetuto come testo normale nella riga sotto.
+        titolo = paragrafo.text.strip().lower()
+        successivo = paragrafi[indice + 1] if indice + 1 < len(paragrafi) else None
+        if successivo is None or not titolo:
+            continue
+        stile_succ = (successivo.style.name if successivo.style is not None else "").lower()
+        if stile_succ.startswith(("heading", "titolo")):
+            continue
+        if successivo.text.strip().lower() == titolo:
+            _elimina_paragrafo(successivo)
+            riparati = True
+    return riparati
 
 
 # ---------------------------------------------------------------------------
@@ -414,6 +477,13 @@ def _compila_tabella_economica(documento, context: Dict[str, Any]) -> bool:
 # Condizioni di vendita
 # ---------------------------------------------------------------------------
 
+def _norm_etichetta(testo: str) -> str:
+    spoglio = str(testo).strip().lower()
+    for accentata, piana in (("à", "a"), ("è", "e"), ("é", "e"), ("ì", "i"), ("ò", "o"), ("ù", "u")):
+        spoglio = spoglio.replace(accentata, piana)
+    return spoglio
+
+
 def _e_tabella_condizioni(tabella) -> bool:
     """Riconosce la tabella etichetta/valore delle condizioni di vendita.
 
@@ -428,8 +498,8 @@ def _e_tabella_condizioni(tabella) -> bool:
         if len(celle) != 2:
             continue
         righe_due_colonne += 1
-        testo = celle[0].text.strip().lower()
-        if any(testo.startswith(chiave) for chiave, _ in ETICHETTE_CONDIZIONI):
+        testo = _norm_etichetta(celle[0].text)
+        if any(testo.startswith(_norm_etichetta(chiave)) for chiave, _ in ETICHETTE_CONDIZIONI):
             etichette += 1
     return righe_due_colonne >= 2 and etichette >= 2
 
@@ -450,9 +520,12 @@ def _compila_condizioni(documento, context: Dict[str, Any]) -> bool:
             celle = _celle_distinte(riga)
             if len(celle) < 2:
                 continue
-            etichetta = celle[0].text.strip().lower()
+            etichetta = _norm_etichetta(celle[0].text)
+            if any(etichetta.startswith(_norm_etichetta(x)) for x in context.get("condizioni_da_togliere", [])):
+                da_togliere.append(riga)
+                continue
             for chiave, campo in ETICHETTE_CONDIZIONI:
-                if not etichetta.startswith(chiave):
+                if not etichetta.startswith(_norm_etichetta(chiave)):
                     continue
                 valore = str(context.get(campo, "")).strip()
                 if valore:
@@ -546,6 +619,87 @@ def _rimuovi_sezioni_vuote(documento, context: Dict[str, Any]) -> None:
             _elimina_sezione(paragrafi, indice)
 
 
+def _e_punto_elenco(paragrafo) -> bool:
+    """Un paragrafo è un punto elenco se ha la numerazione o uno stile da elenco.
+
+    Il pallino può arrivare dal paragrafo (``w:numPr``, come nei modelli AD) o
+    dallo stile ("List Bullet"): vanno riconosciuti entrambi.
+    """
+    from docx.oxml.ns import qn
+
+    pPr = paragrafo._p.pPr
+    if pPr is not None and pPr.find(qn("w:numPr")) is not None:
+        return True
+    stile = (paragrafo.style.name if paragrafo.style is not None else "").lower()
+    return stile.startswith(("list ", "elenco"))
+
+
+def _donatore_elenco(documento):
+    """Un punto elenco già presente nel modello, da cui copiare bullet e rientri.
+
+    Lo stile "List Paragraph" da solo non disegna il pallino: nei modelli AD la
+    numerazione sta sul paragrafo (``w:numPr``). Copiare un punto elenco vero è
+    l'unico modo di ottenere un elenco identico agli altri del documento.
+    """
+    ripiego = None
+    for paragrafo in documento.paragraphs:
+        if _livello_titolo(paragrafo) or not paragrafo.text.strip():
+            continue
+        if not _e_punto_elenco(paragrafo):
+            continue
+        from docx.oxml.ns import qn
+
+        pPr = paragrafo._p.pPr
+        if pPr is not None and pPr.find(qn("w:numPr")) is not None:
+            return paragrafo
+        ripiego = ripiego or paragrafo
+    return ripiego
+
+
+def _elenco_oggetto(documento, context: Dict[str, Any]) -> bool:
+    """Elenca i prodotti sotto il capitolo Oggetto, anche senza segnaposto.
+
+    Il modello AD scrive "...la fornitura dei seguenti prodotti e servizi:" e
+    poi lascia lo spazio bianco: l'elenco va aggiunto, altrimenti il capitolo
+    annuncia un elenco che non c'è.
+    """
+    from docx.text.paragraph import Paragraph
+    import copy as _copy
+
+    voci = [str(v).strip() for v in (context.get("voci_oggetto") or []) if str(v).strip()]
+    if not voci:
+        return False
+
+    paragrafi = list(documento.paragraphs)
+    for indice, paragrafo in enumerate(paragrafi):
+        if not _livello_titolo(paragrafo) or paragrafo.text.strip().lower() != "oggetto":
+            continue
+
+        sezione = []
+        for successivo in paragrafi[indice + 1:]:
+            if _livello_titolo(successivo):
+                break
+            sezione.append(successivo)
+        pieni = [par for par in sezione if par.text.strip()]
+        if not pieni:
+            return False
+        # Già elencato (segnaposto espanso o documento ricompilato): non si tocca.
+        gia_scritte = {par.text.strip() for par in pieni}
+        if any(voce in gia_scritte for voce in voci):
+            return False
+
+        donatore = _donatore_elenco(documento)
+        modello = donatore._p if donatore is not None else pieni[-1]._p
+        riferimento = pieni[-1]
+        for voce in voci:
+            nuovo_p = _copy.deepcopy(modello)
+            riferimento._p.addnext(nuovo_p)
+            riferimento = Paragraph(nuovo_p, paragrafo._parent)
+            _scrivi(riferimento, voce)
+        return True
+    return False
+
+
 def _compila_paragrafi(documento, context: Dict[str, Any]) -> bool:
     paragrafi = list(documento.paragraphs)
     scritto = False
@@ -570,6 +724,8 @@ def _compila_paragrafi(documento, context: Dict[str, Any]) -> bool:
                 _espandi_elenco(paragrafo, context.get("requisiti") or [])
             elif sezione.startswith("esclusioni"):
                 _espandi_elenco(paragrafo, context.get("esclusioni") or [])
+            elif context.get("voci_oggetto"):
+                _espandi_elenco(paragrafo, context.get("voci_oggetto") or [])
             else:
                 _scrivi(paragrafo, str(context.get("descrizione_fornitura", "")))
             scritto = True

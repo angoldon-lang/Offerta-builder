@@ -20,11 +20,13 @@ const state = {
 const GRUPPI = [
   { titolo: 'Cliente', campi: ['cliente', 'piva', 'indirizzo_cliente', 'referente', 'email_referente'] },
   { titolo: 'Offerta', campi: ['oggetto', 'autore', 'riferimento_offerta', 'data_offerta', 'validita_offerta'] },
-  { titolo: 'Condizioni', campi: ['tipologia_pagamento', 'condizioni_pagamento', 'fatturazione', 'durata_contratto_anni', 'rinnovo'] },
-  { titolo: 'Testi', campi: ['premessa', 'requisiti_cliente', 'esclusioni', 'note_commerciali', 'allegati'] },
+  { titolo: 'Condizioni', campi: ['tipologia_pagamento', 'condizioni_pagamento', 'fatturazione', 'durata_contratto_anni', 'rinnovo', 'condizioni_da_togliere'] },
+  { titolo: 'Testi', campi: ['premessa', 'requisiti_cliente', 'esclusioni', 'note_offerta', 'note_commerciali', 'allegati'] },
 ];
 const CAMPI_PREZZO = ['iva_percento', 'margine_minimo_percento'];
-const CAMPI_SALTATI = ['servizi_aggiuntivi'];
+// Campi gestiti fuori dal form: le voci libere stanno nel blocco "aggiunte a mano",
+// l'adeguamento fra i controlli dei prezzi.
+const CAMPI_SALTATI = ['servizi_aggiuntivi', 'righe_aggiuntive', 'adeguamento_percent'];
 const STORAGE_KEY = 'offerta-builder-form';
 
 /* ------------------------------------------------------------------ utility */

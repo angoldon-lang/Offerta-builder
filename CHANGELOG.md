@@ -4,6 +4,26 @@ Il numero di versione si legge con `offerta --version` o in alto a destra
 nell'interfaccia web. Se dopo un `git pull` il numero non cambia, l'aggiornamento
 non è arrivato.
 
+## 0.10.0
+
+**Il capitolo Oggetto elenca davvero i prodotti.** Il modello AD annuncia
+"...la fornitura dei seguenti prodotti e servizi:" e poi lascia lo spazio
+bianco: ora sotto compare un punto elenco per prodotto, con codice e quantità,
+con lo stesso pallino e lo stesso rientro degli altri elenchi del documento.
+
+- **condizioni da non riportare**: si elencano le etichette da togliere dalla
+  tabella delle condizioni (es. "Validità contratto" in una fornitura di
+  licenze), dal form web o dal campo `condizioni_da_togliere`;
+- **note nella tabella economica** e **condizioni da non riportare** ora si
+  compilano anche dall'interfaccia web: prima esistevano solo via API;
+- il DOCX si **scarica col nome di protocollo**
+  (`OFF_ADC_26_0751_Rinnovo_VMware.docx`), non più `offerta.docx`; gli allegati
+  interni (BOM normalizzata, QA, riepilogo) tengono il loro nome.
+
+Corretto: le etichette accentate della tabella condizioni non venivano
+riconosciute ("Validità offerta" restava vuota) perché il confronto toglieva
+gli accenti da una parte sola.
+
 ## 0.9.0
 
 **Regole AD Consulting.** Il profilo standard della casa, applicato di serie.

@@ -93,6 +93,8 @@ FIELDS: List[FieldSpec] = [
               help="Elenco di oggetti {descrizione, quantita, prezzo_unitario, costo_unitario}"),
     FieldSpec("adeguamento_percent", "Adeguamento prezzi %", kind=KIND_DECIMAL,
               example="3", help="Ritocco sui prezzi ripresi da un'offerta precedente"),
+    FieldSpec("condizioni_da_togliere", "Condizioni da non riportare", kind=KIND_LIST,
+              help="Etichette della tabella condizioni da eliminare, es. Validità contratto"),
     FieldSpec("note_offerta", "Note nella tabella economica", kind=KIND_LIST,
               help="Righe di sola descrizione: dettagli di rinnovo, clausole contrattuali"),
     FieldSpec("righe_aggiuntive", "Righe libere in offerta", kind=KIND_LIST,
@@ -135,6 +137,7 @@ def blank_form() -> Dict[str, Any]:
     data["righe"] = []
     data["righe_aggiuntive"] = []
     data["note_offerta"] = []
+    data["condizioni_da_togliere"] = []
     data["pricing"] = {
         "mode": "target_margin",
         "markup_percent": 0,

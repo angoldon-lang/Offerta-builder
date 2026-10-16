@@ -179,6 +179,7 @@ Codici di uscita: `0` tutto ok, `2` flusso bloccato prima della generazione,
 | File | Contenuto |
 | ---- | --------- |
 | `offerta.docx` | offerta compilata sul template AD: è il deliverable, si ritocca a mano |
+| | dall'interfaccia web si scarica col nome di protocollo, es. `OFF_ADC_26_0751_Rinnovo_VMware.docx` |
 | `offerta.pdf` | solo con `--pdf`, e solo a QA superato |
 | `bom_normalizzata.json` | BOM nello schema unico, con le anomalie di import |
 | `dati_offerta.json` | righe, totali, annualità: la fonte numerica del documento |

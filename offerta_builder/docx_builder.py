@@ -112,6 +112,7 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
         # testi
         "premessa": content.get("premessa", ""),
         "descrizione_fornitura": content.get("descrizione_fornitura", ""),
+        "voci_oggetto": content.get("voci_oggetto", []),
         "descrizione_servizi": content.get("descrizione_servizi", []),
         "requisiti": content.get("requisiti", []),
         "esclusioni": content.get("esclusioni", []),
@@ -129,6 +130,7 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
         "condizioni_pagamento": condizioni.get("condizioni_pagamento", ""),
         "fatturazione": condizioni.get("fatturazione", ""),
         "durata_contratto": condizioni.get("durata_contratto", ""),
+        "condizioni_da_togliere": form.get("condizioni_da_togliere") or [],
         "rinnovo": condizioni.get("rinnovo", ""),
         "iva_percento": format_percent(form.get("iva_percento", 0), 0),
         # economics
