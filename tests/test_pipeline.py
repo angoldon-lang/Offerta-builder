@@ -379,3 +379,91 @@ def test_note_redazionali_del_modello_rimosse(tmp_path, csv_bom_path, form_data)
         template_path=percorso,
     )
     assert "inserire il paragrafo" not in extract_text(result.outputs["docx"])
+
+
+# ---------------------------------------------------------------------------
+# Regole AD Consulting: note in tabella, condizioni ridotte, nome del file
+# ---------------------------------------------------------------------------
+
+def test_note_in_tabella_senza_quantita_ne_importo(tmp_path, csv_bom_path, form_data):
+    """Dettagli di rinnovo e clausole: righe di sola descrizione."""
+    from docx import Document
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["note_offerta"] = [
+        "RINNOVO 53216299 - START DATE 18/10/2026 END DATE 17/10/2027",
+        "Le licenze sono erogate e fatturate direttamente da AD Consulting S.p.A.",
+    ]
+    prima = build_offer(
+        bom_paths=[csv_bom_path], form=dict(form_data, note_offerta=[]),
+        output_dir=str(tmp_path / "senza"),
+    )
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "con"),
+        template_path=template,
+    )
+
+    # le note non toccano i totali
+    assert result.offer.totals.total_net == prima.offer.totals.total_net
+
+    tabella = Document(result.outputs["docx"]).tables[0]
+    riga = next(r for r in tabella.rows if "RINNOVO 53216299" in r.cells[0].text)
+    assert riga.cells[1].text.strip() == ""
+    assert riga.cells[2].text.strip() == ""
+
+
+def test_condizioni_senza_valore_vengono_tolte(tmp_path, csv_bom_path, form_data):
+    """Fornitura di licenze: niente "Validità contratto" né "Rinnovo"."""
+    from docx import Document
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["rinnovo"] = ""
+    form_data["durata_contratto_anni"] = 1
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    etichette = [r.cells[0].text.strip().lower() for r in Document(result.outputs["docx"]).tables[1].rows]
+    assert "rinnovo" not in etichette
+    assert "tipologia di pagamento" in etichette
+
+
+def test_sommario_si_aggiorna_allapertura(tmp_path, csv_bom_path, form_data):
+    """Tolto un capitolo, l'indice va rigenerato da Word."""
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    impostazioni = Document(result.outputs["docx"]).settings.element
+    assert impostazioni.find(qn("w:updateFields")) is not None
+
+
+def test_nome_file_offerta():
+    from offerta_builder.pipeline import nome_file_offerta
+
+    assert nome_file_offerta(
+        {"riferimento_offerta": "OFF_ADC_26_0751", "oggetto": "Rinnovo VMware"}
+    ) == "OFF_ADC_26_0751_Rinnovo_VMware.docx"
+    assert nome_file_offerta({}) == "offerta.docx"
+
+
+def test_nota_che_comincia_per_rinnovo_non_e_una_condizione(tmp_path, csv_bom_path, form_data):
+    """La riga 'RINNOVO 53216299 ...' sta in offerta economica, non fra le condizioni."""
+    from docx import Document
+
+    template = _modello_ad(str(tmp_path / "modello_ad.docx"))
+    form_data["note_offerta"] = ["RINNOVO 53216299 - START DATE 18/10/2026 END DATE 17/10/2027"]
+    form_data["rinnovo"] = "da concordare"
+    result = build_offer(
+        bom_paths=[csv_bom_path], form=form_data, output_dir=str(tmp_path / "out"),
+        template_path=template,
+    )
+    documento = Document(result.outputs["docx"])
+    nota = next(r for r in documento.tables[0].rows if "RINNOVO 53216299" in r.cells[0].text)
+    assert nota.cells[1].text.strip() == ""
+    condizioni = {r.cells[0].text.strip().lower(): r.cells[1].text.strip() for r in documento.tables[1].rows}
+    assert condizioni["rinnovo"] == "da concordare"

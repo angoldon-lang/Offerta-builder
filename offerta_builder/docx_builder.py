@@ -61,9 +61,13 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
                 "descrizione_completa": _descrizione_riga(item, estese),
                 "categoria": item.category,
                 "periodo": _periodo_leggibile(item.period),
-                "quantita": format_number(item.quantity, 0 if item.quantity == item.quantity.to_integral_value() else 2),
-                "prezzo_unitario": format_eur(item.sell_net_unit, CURRENCY_LABEL),
-                "totale": item.display_price or format_eur(item.sell_net_total, CURRENCY_LABEL),
+                "quantita": "" if item.is_note else format_number(
+                    item.quantity, 0 if item.quantity == item.quantity.to_integral_value() else 2
+                ),
+                "prezzo_unitario": "" if item.is_note else format_eur(item.sell_net_unit, CURRENCY_LABEL),
+                "totale": "" if item.is_note else (
+                    item.display_price or format_eur(item.sell_net_total, CURRENCY_LABEL)
+                ),
                 "iva_percento": format_percent(item.vat_percent, 0),
                 "iva": format_eur(item.vat_total, CURRENCY_LABEL),
                 "totale_ivato": format_eur(item.sell_gross_total, CURRENCY_LABEL),
@@ -115,6 +119,13 @@ def build_context(offer: PricedOffer, form: Dict[str, Any], content: Dict[str, A
         "allegati": content.get("allegati", []),
         # condizioni
         "tipologia_pagamento": condizioni.get("tipologia_pagamento", ""),
+        # Per i modelli con una riga sola "Tipologia e condizioni di pagamento".
+        "pagamento_completo": " ".join(
+            parte for parte in (
+                condizioni.get("tipologia_pagamento", ""),
+                condizioni.get("condizioni_pagamento", ""),
+            ) if parte
+        ),
         "condizioni_pagamento": condizioni.get("condizioni_pagamento", ""),
         "fatturazione": condizioni.get("fatturazione", ""),
         "durata_contratto": condizioni.get("durata_contratto", ""),

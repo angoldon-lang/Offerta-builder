@@ -37,6 +37,8 @@ RIEMPITIVO = re.compile(r"[_\s]{3,}$")
 
 # --- condizioni di vendita: etichetta di riga -> campo ----------------------
 ETICHETTE_CONDIZIONI = [
+    # Alcuni modelli uniscono tipologia e condizioni in una riga sola.
+    ("tipologia e condizioni di pagamento", "pagamento_completo"),
     ("tipologia di pagamento", "tipologia_pagamento"),
     ("condizioni di pagamento", "condizioni_pagamento"),
     ("fatturazione", "fatturazione"),
@@ -109,6 +111,21 @@ def recognized_sections(template_path: str) -> List[str]:
     return sezioni
 
 
+def _aggiorna_sommario(documento) -> None:
+    """Chiede a Word di rigenerare i campi (Sommario compreso) all'apertura.
+
+    Togliendo un capitolo la numerazione cambia: senza questo, l'indice a
+    pagina 2 resterebbe quello vecchio finché qualcuno non preme F9.
+    """
+    from docx.oxml.ns import qn
+
+    impostazioni = documento.settings.element
+    if impostazioni.find(qn("w:updateFields")) is not None:
+        return
+    elemento = impostazioni.makeelement(qn("w:updateFields"), {qn("w:val"): "true"})
+    impostazioni.append(elemento)
+
+
 def fill_document(template_path: str, context: Dict[str, Any], output_path: str) -> List[str]:
     """Compila il template riconoscendo le etichette. Ritorna cosa ha riempito."""
     from docx import Document
@@ -125,6 +142,7 @@ def fill_document(template_path: str, context: Dict[str, Any], output_path: str)
     if _compila_paragrafi(documento, context):
         fatti.append("oggetto, premessa, requisiti ed esclusioni")
 
+    _aggiorna_sommario(documento)
     documento.save(output_path)
     return fatti
 
@@ -396,9 +414,38 @@ def _compila_tabella_economica(documento, context: Dict[str, Any]) -> bool:
 # Condizioni di vendita
 # ---------------------------------------------------------------------------
 
+def _e_tabella_condizioni(tabella) -> bool:
+    """Riconosce la tabella etichetta/valore delle condizioni di vendita.
+
+    Senza questo controllo una riga dell'offerta economica che comincia per
+    "RINNOVO ..." verrebbe scambiata per la riga "Rinnovo" delle condizioni, e
+    il valore finirebbe nella colonna della quantità.
+    """
+    righe_due_colonne = 0
+    etichette = 0
+    for riga in tabella.rows:
+        celle = _celle_distinte(riga)
+        if len(celle) != 2:
+            continue
+        righe_due_colonne += 1
+        testo = celle[0].text.strip().lower()
+        if any(testo.startswith(chiave) for chiave, _ in ETICHETTE_CONDIZIONI):
+            etichette += 1
+    return righe_due_colonne >= 2 and etichette >= 2
+
+
 def _compila_condizioni(documento, context: Dict[str, Any]) -> bool:
+    """Compila la tabella delle condizioni di vendita.
+
+    Le righe previste dal modello ma senza valore (tipicamente "Validità
+    contratto" e "Rinnovo" in una fornitura di licenze) vengono tolte: meglio
+    una tabella corta che una con celle vuote.
+    """
     scritto = False
     for tabella in documento.tables:
+        if not _e_tabella_condizioni(tabella):
+            continue
+        da_togliere = []
         for riga in tabella.rows:
             celle = _celle_distinte(riga)
             if len(celle) < 2:
@@ -409,9 +456,16 @@ def _compila_condizioni(documento, context: Dict[str, Any]) -> bool:
                     continue
                 valore = str(context.get(campo, "")).strip()
                 if valore:
+                    if campo == "validita_offerta" and "fino al" in celle[1].text.strip().lower():
+                        valore = f"FINO AL {valore}"
                     _scrivi_cella(celle[1], valore)
                     scritto = True
+                else:
+                    da_togliere.append(riga)
                 break
+        for riga in da_togliere:
+            _elimina_riga(riga)
+            scritto = True
     return scritto
 
 

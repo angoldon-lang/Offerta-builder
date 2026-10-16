@@ -143,6 +143,13 @@ def _services_from_form(form: Dict[str, Any]) -> List[ServiceLine]:
         (form.get("servizi_aggiuntivi") or [], "servizi"),
         (form.get("righe_aggiuntive") or [], "prodotti"),
     ]
+    # Le note sono righe di sola descrizione in fondo al blocco materiali.
+    note = [
+        {"descrizione": testo, "prezzo_unitario": "", "nota": True}
+        for testo in (form.get("note_offerta") or [])
+        if str(testo).strip()
+    ]
+    sorgenti.append((note, "prodotti"))
     for elenco, blocco_default in sorgenti:
         for raw in elenco:
             if not isinstance(raw, dict) or not str(raw.get("descrizione", "")).strip():
@@ -162,7 +169,8 @@ def _services_from_form(form: Dict[str, Any]) -> List[ServiceLine]:
                     period=str(raw.get("periodo") or ""),
                     notes=str(raw.get("note") or ""),
                     block=str(raw.get("blocco") or blocco_default),
-                    display_price=etichetta,
+                    display_price="" if raw.get("nota") else etichetta,
+                    note=bool(raw.get("nota")),
                 )
             )
     return services
@@ -330,6 +338,16 @@ def build_offer(
                     Issue(code="pipeline.pdf_error", severity=SEVERITY_BLOCKING, message=str(exc))
                 )
     return result
+
+
+def nome_file_offerta(form: Dict[str, Any], estensione: str = ".docx") -> str:
+    """``OFF_ADC_26_0751_Rinnovo_VMware.docx`` dal riferimento e dall'oggetto."""
+    import re
+
+    riferimento = re.sub(r"[^A-Za-z0-9]+", "_", str(form.get("riferimento_offerta", ""))).strip("_")
+    titolo = re.sub(r"[^A-Za-z0-9]+", "_", str(form.get("oggetto", ""))).strip("_")
+    parti = [parte for parte in (riferimento, titolo) if parte]
+    return ("_".join(parti) or "offerta") + estensione
 
 
 def _offer_meta(form: Dict[str, Any]) -> Dict[str, Any]:

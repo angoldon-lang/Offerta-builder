@@ -76,6 +76,7 @@ class BomItem:
     # l'interfaccia identifica una riga da modificare.
     source_index: int = -1
     source_reference: str = ""
+    is_note: bool = False
     edited: bool = False
     # Testo da stampare al posto dell'importo (es. "Incluso"): vale zero nei
     # totali, ma in offerta si legge come l'ha scritto l'operatore.
@@ -151,6 +152,9 @@ class ServiceLine:
     # "prodotti" la mette fra i materiali, "servizi" nel blocco servizi.
     block: str = "servizi"
     display_price: str = ""
+    # Riga di sola descrizione (dettaglio di rinnovo, clausola contrattuale):
+    # niente quantità né importo.
+    note: bool = False
 
 
 @dataclass

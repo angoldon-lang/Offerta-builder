@@ -178,8 +178,8 @@ def test_javascript_sintatticamente_valido():
 def test_schema_espone_i_valori_proposti_per_le_condizioni(client):
     campi = {campo["nome"]: campo for campo in client.get("/api/schema").get_json()["campi"]}
     assert "30 gg fine mese" in campi["condizioni_pagamento"]["suggerimenti"]
-    assert "Bonifico bancario" in campi["tipologia_pagamento"]["suggerimenti"]
-    assert "Annuale anticipata" in campi["fatturazione"]["suggerimenti"]
+    assert "Bonifico Bancario" in campi["tipologia_pagamento"]["suggerimenti"]
+    assert "Alla consegna" in campi["fatturazione"]["suggerimenti"]
     assert campi["durata_contratto_anni"]["suggerimenti"] == ["1", "2", "3", "4", "5"]
     # restano proposte, non un elenco chiuso
     assert campi["condizioni_pagamento"]["scelte"] == []

@@ -344,6 +344,10 @@ def _leggi_oggetto(contenuto: _Contenuto, risultato: OffertaImportata) -> None:
 def _leggi_condizioni(contenuto: _Contenuto, risultato: OffertaImportata) -> None:
     etichette = list(ETICHETTE_CONDIZIONI) + CONDIZIONI_EXTRA + COPERTINA_TABELLA
     for tabella in contenuto.tabelle:
+        # Solo tabelle etichetta/valore: nella tabella economica una riga che
+        # comincia per "RINNOVO ..." non è la condizione di rinnovo.
+        if not tabella or max(len(riga) for riga in tabella) > 2:
+            continue
         for riga in tabella:
             if len(riga) < 2:
                 continue

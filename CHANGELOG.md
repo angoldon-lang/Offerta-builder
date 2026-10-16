@@ -4,6 +4,29 @@ Il numero di versione si legge con `offerta --version` o in alto a destra
 nell'interfaccia web. Se dopo un `git pull` il numero non cambia, l'aggiornamento
 non è arrivato.
 
+## 0.9.0
+
+**Regole AD Consulting.** Il profilo standard della casa, applicato di serie.
+
+- default: autore `Sales Inside`, pagamento `Bonifico Bancario 30gg Fine Mese`,
+  fatturazione `Alla consegna`;
+- **note nella tabella economica**: righe di sola descrizione (dettaglio di
+  rinnovo, clausola contrattuale AD), senza quantità né importo e senza toccare
+  i totali;
+- le righe delle **condizioni di vendita senza valore vengono tolte** (in una
+  fornitura di licenze spariscono "Validità contratto" e "Rinnovo");
+- riga unica "Tipologia e condizioni di pagamento" riconosciuta, e la validità
+  si scrive come `FINO AL gg/mm/aaaa` quando il modello lo prevede;
+- **Sommario aggiornato all'apertura**: tolto un capitolo, Word rigenera indice
+  e numerazione;
+- **P.IVA estera** accettata (es. `DK36053011`), con avviso sul regime IVA;
+- nome del file `OFF_ADC_26_0751_Rinnovo_VMware.docx`, dal riferimento e
+  dall'oggetto.
+
+Corretto un errore serio: una riga dell'offerta che cominciava per "RINNOVO ..."
+veniva scambiata per la riga "Rinnovo" delle condizioni, e il valore finiva
+nella colonna della quantità.
+
 ## 0.8.0
 
 **Il rinnovo funziona davvero.** Prima accettava solo il DOCX e su alcuni

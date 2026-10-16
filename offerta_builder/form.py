@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Dict, List, Sequence
@@ -48,28 +49,32 @@ FIELDS: List[FieldSpec] = [
     FieldSpec("piva", "P.IVA", required=True, example="03830780361"),
     FieldSpec("referente", "Referente", required=True, example="Serena Piantoni"),
     FieldSpec("oggetto", "Oggetto offerta", required=True, example="Fornitura Soluzione SolarWinds"),
-    FieldSpec("autore", "Autore", required=True, example="Andrea Goldoni"),
+    FieldSpec("autore", "Autore", required=True, default="Sales Inside", example="Sales Inside"),
     FieldSpec("riferimento_offerta", "Riferimento offerta", required=True, example="OFF_ADC_26/0313_R03"),
     FieldSpec("data_offerta", "Data offerta", kind=KIND_DATE, required=True, example="19/07/2026"),
     FieldSpec("validita_offerta", "Validità offerta", kind=KIND_DATE, required=True, example="31/07/2026"),
     FieldSpec(
-        "tipologia_pagamento", "Tipologia pagamento", required=True, example="Bonifico bancario",
+        "tipologia_pagamento", "Tipologia pagamento", required=True, example="Bonifico Bancario",
+        default="Bonifico Bancario",
         suggestions=(
-            "Bonifico bancario", "Bonifico bancario anticipato", "RiBa", "Rimessa diretta",
+            "Bonifico Bancario", "Bonifico bancario anticipato", "RiBa", "Rimessa diretta",
             "Addebito SEPA", "Carta di credito",
         ),
     ),
     FieldSpec(
-        "condizioni_pagamento", "Condizioni pagamento", required=True, example="30 gg fine mese",
+        "condizioni_pagamento", "Condizioni pagamento", required=True, example="30gg Fine Mese",
+        default="30gg Fine Mese",
         suggestions=(
+            "30gg Fine Mese",
             "Pagamento anticipato", "30 gg data fattura", "30 gg fine mese", "60 gg data fattura",
             "60 gg fine mese", "90 gg fine mese", "50% all'ordine, 50% alla consegna",
         ),
     ),
     FieldSpec(
-        "fatturazione", "Fatturazione", required=True, example="Annuale anticipata",
+        "fatturazione", "Fatturazione", required=True, example="Alla consegna",
+        default="Alla consegna",
         suggestions=(
-            "Unica soluzione all'ordine", "Annuale anticipata", "Annuale posticipata",
+            "Alla consegna", "Unica soluzione all'ordine", "Annuale anticipata", "Annuale posticipata",
             "Alla consegna", "Trimestrale anticipata", "Mensile", "A stato avanzamento lavori",
         ),
     ),
@@ -88,6 +93,8 @@ FIELDS: List[FieldSpec] = [
               help="Elenco di oggetti {descrizione, quantita, prezzo_unitario, costo_unitario}"),
     FieldSpec("adeguamento_percent", "Adeguamento prezzi %", kind=KIND_DECIMAL,
               example="3", help="Ritocco sui prezzi ripresi da un'offerta precedente"),
+    FieldSpec("note_offerta", "Note nella tabella economica", kind=KIND_LIST,
+              help="Righe di sola descrizione: dettagli di rinnovo, clausole contrattuali"),
     FieldSpec("righe_aggiuntive", "Righe libere in offerta", kind=KIND_LIST,
               help="Voci da aggiungere fra i materiali; il prezzo può essere un testo (es. Incluso)"),
     FieldSpec("requisiti_cliente", "Requisiti a carico del cliente", kind=KIND_LIST),
@@ -127,6 +134,7 @@ def blank_form() -> Dict[str, Any]:
     # Correzioni manuali riga per riga, valorizzate dall'interfaccia web.
     data["righe"] = []
     data["righe_aggiuntive"] = []
+    data["note_offerta"] = []
     data["pricing"] = {
         "mode": "target_margin",
         "markup_percent": 0,
@@ -287,9 +295,30 @@ def validate(data: Dict[str, Any]) -> tuple[Dict[str, Any], List[Issue]]:
     return clean, issues
 
 
+VAT_ESTERO = re.compile(r"^([A-Z]{2})\s*([A-Z0-9]{6,13})$", re.IGNORECASE)
+
+
 def _validate_piva(value: Any) -> List[Issue]:
     if not _has_value(value):
         return []
+
+    testo = str(value).strip().upper().replace(" ", "")
+    estero = VAT_ESTERO.match(testo)
+    if estero and estero.group(1) != "IT":
+        # Partita IVA comunitaria (es. DK36053011): formato diverso, e la
+        # fornitura è in genere senza IVA italiana.
+        return [
+            Issue(
+                code="form.piva_estera",
+                severity=SEVERITY_WARNING,
+                message=(
+                    f"Partita IVA estera ({testo}): verifica il regime IVA applicabile "
+                    "(cessione intracomunitaria / reverse charge) prima di esporre il 22%."
+                ),
+                where="piva",
+            )
+        ]
+
     digits = "".join(ch for ch in str(value) if ch.isdigit())
     if len(digits) != 11:
         return [
